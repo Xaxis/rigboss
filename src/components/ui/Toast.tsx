@@ -138,20 +138,20 @@ interface ToastManagerProps {
 
 export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) => {
   return (
-    <>
+    <div className="fixed top-4 right-4 z-50 pointer-events-none">
       {toasts.map((toast, index) => (
         <div
           key={toast.id}
           style={{
-            top: `${1 + index * 5}rem`,
+            marginTop: index > 0 ? '0.5rem' : '0',
             zIndex: 50 + index
           }}
-          className="fixed right-4 pointer-events-auto"
+          className="pointer-events-auto"
         >
           <Toast {...toast} onClose={onRemove} />
         </div>
       ))}
-    </>
+    </div>
   );
 };
 

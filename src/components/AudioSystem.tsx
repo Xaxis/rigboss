@@ -43,9 +43,8 @@ const AudioSystem: React.FC = () => {
       onAvailable: (available) => {
         if (!available) {
           addToast({ type: 'warning', title: 'Audio transport unavailable', message: 'Server missing ffmpeg. Install ffmpeg for audio streaming.' });
-        } else {
-          addToast({ type: 'success', title: 'Audio ready', message: 'Cross-platform audio streaming enabled' });
         }
+        // Don't show success toast automatically - wait for user to start audio
       },
       onConnected: () => {
         setIsReceivingAudio(true);
@@ -59,7 +58,7 @@ const AudioSystem: React.FC = () => {
     });
     engineRef.current = engine;
     if (audioElRef.current) engine.attachOutputElement(audioElRef.current);
-    engine.start().catch(() => {/* ignore */});
+    // Don't auto-start - wait for user to click "Start Audio"
 
     // Listen for PTT events from RadioInterface
     const handlePTTChange = (event: CustomEvent) => {
@@ -187,8 +186,9 @@ const AudioSystem: React.FC = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setAudioStream(stream);
 
-      // Start mic capture for the audio engine
+      // Start the audio engine (connects to backend and starts RX audio)
       if (engineRef.current) {
+        await engineRef.current.start();
         await engineRef.current.startMicCapture(selectedMicrophone || undefined);
       }
 
@@ -218,16 +218,26 @@ const AudioSystem: React.FC = () => {
   };
 
   const stopAudio = () => {
+    // Stop local audio stream
     if (audioStream) {
       audioStream.getTracks().forEach(track => track.stop());
       setAudioStream(null);
     }
+
+    // Stop audio engine
+    if (engineRef.current) {
+      engineRef.current.stop();
+    }
+
     setAudioEnabled(false);
     setVuMeterMic(0);
+    setIsReceivingAudio(false);
+    setRxAudioLevel(0);
+
     addToast({
       type: 'info',
       title: 'Audio Stopped',
-      message: 'Microphone is now inactive',
+      message: 'Radio audio streaming stopped',
       duration: 2000,
     });
   };
@@ -288,16 +298,27 @@ const AudioSystem: React.FC = () => {
         </div>
       </div>
 
+      {/* Audio System Overview */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
+        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">How Radio Audio Works</h4>
+        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+          <p><strong>RX (Receive):</strong> Radio audio → Computer speakers/headphones</p>
+          <p><strong>TX (Transmit):</strong> Computer microphone → Radio (when PTT pressed)</p>
+          <p><strong>Radio Connection:</strong> USB cable to radio (automatically detected on server)</p>
+          <p><strong>Computer Devices:</strong> Select your microphone and speakers below</p>
+        </div>
+      </div>
+
       {/* Audio Controls Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Microphone Section */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900 dark:text-white">Microphone</h4>
+          <h4 className="font-medium text-gray-900 dark:text-white">Microphone (TX Audio)</h4>
 
           {/* Device Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Input Device
+              Computer Microphone (for transmitting to radio)
             </label>
             <select
               value={selectedMicrophone || ''}
@@ -362,12 +383,12 @@ const AudioSystem: React.FC = () => {
 
         {/* Speaker Section */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900 dark:text-white">Speaker</h4>
+          <h4 className="font-medium text-gray-900 dark:text-white">Speakers (RX Audio)</h4>
 
           {/* Device Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Output Device
+              Computer Speakers (for hearing radio audio)
             </label>
             <select
               value={selectedSpeaker || ''}
@@ -431,21 +452,34 @@ const AudioSystem: React.FC = () => {
         </div>
       </div>
 
-      {/* Audio Status */}
+      {/* Radio Audio Streaming */}
       <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4">Audio Status</h4>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-medium text-gray-900 dark:text-white">Radio Audio Streaming</h4>
+          <button
+            onClick={isReceivingAudio ? stopAudio : startAudio}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              isReceivingAudio
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+          >
+            {isReceivingAudio ? 'Stop Audio' : 'Start Audio'}
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {/* RX Audio Status */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <div className={`w-3 h-3 rounded-full ${isReceivingAudio ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
               <span className="text-sm text-gray-700 dark:text-gray-300">
-                RX Audio {isReceivingAudio ? 'Active' : 'Inactive'}
+                Radio → Computer: {isReceivingAudio ? 'Streaming' : 'Stopped'}
               </span>
             </div>
             {isReceivingAudio && (
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-500">Level:</span>
-                <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div
                     className="bg-green-500 h-2 rounded-full transition-all duration-100"
                     style={{ width: `${Math.min(100, rxAudioLevel)}%` }}
@@ -455,11 +489,18 @@ const AudioSystem: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* TX Audio Status */}
           <div className="flex items-center space-x-2">
             <div className={`w-3 h-3 rounded-full ${isTransmitting ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`} />
             <span className="text-sm text-gray-700 dark:text-gray-300">
-              TX Audio {isTransmitting ? 'Transmitting' : 'Standby'}
+              Computer → Radio: {isTransmitting ? 'Transmitting (PTT Active)' : 'Ready (Press PTT to transmit)'}
             </span>
+          </div>
+
+          <div className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 p-2 rounded">
+            💡 <strong>How it works:</strong> Start audio to hear your radio through your computer speakers.
+            When you press PTT, your computer microphone will transmit through the radio.
           </div>
         </div>
       </div>
