@@ -122,14 +122,23 @@ class BackendConfig {
 
     this.initialize();
     const testUrl = url || this._baseUrl;
+    const healthUrl = `${testUrl}/api/health`;
+    console.log('[backendConfig] Testing connection to:', healthUrl);
+
     try {
-      const response = await fetch(`${testUrl}/api/health`, {
+      const response = await fetch(healthUrl, {
         method: 'GET',
         mode: 'cors',
         signal: AbortSignal.timeout(5000)
       });
+      console.log('[backendConfig] Health check response:', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText
+      });
       return response.ok;
-    } catch {
+    } catch (error) {
+      console.error('[backendConfig] Health check failed:', error);
       return false;
     }
   }
