@@ -1,5 +1,26 @@
 // Core radio types and interfaces for rigboss
 
+export interface AudioLevels {
+  af: number;        // Audio Frequency (Volume) 0-100
+  rf: number;        // RF Gain 0-100
+  micGain: number;   // Microphone Gain 0-100
+  rfPower: number;   // RF Power Output 0-100
+  sql: number;       // Squelch 0-100
+  voxGain: number;   // VOX Sensitivity 0-100
+  comp: number;      // Speech Compressor 0-100
+  nr: number;        // Noise Reduction 0-100
+  agc: number;       // AGC Mode (0=OFF, 1=SUPERFAST, 2=FAST, 3=MEDIUM, 4=SLOW, 5=USER, 6=AUTO)
+  preamp: number;    // Preamplifier dB
+  att: number;       // Attenuator dB
+}
+
+export interface AudioFunctions {
+  vox: boolean;      // Voice Operated Transmission
+  comp: boolean;     // Speech Compressor Enable
+  nr: boolean;       // Noise Reduction Enable
+  notch: boolean;    // Notch Filter Enable
+}
+
 export interface RadioState {
   frequency: number;
   mode: RadioMode;
@@ -12,6 +33,8 @@ export interface RadioState {
   connected: boolean;
   model: string;
   serialNumber?: string;
+  audioLevels?: AudioLevels;
+  audioFunctions?: AudioFunctions;
 }
 
 export type RadioMode = 

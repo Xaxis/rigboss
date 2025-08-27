@@ -258,6 +258,103 @@ export class RigctlService extends EventEmitter {
     }
   }
 
+  // Audio Level Controls
+  async setAudioLevel(level: string, value: number): Promise<void> {
+    // Convert 0-100 range to 0.0-1.0 for rigctl
+    const normalizedValue = Math.max(0, Math.min(100, value)) / 100;
+    await this.sendCommand(`L ${level} ${normalizedValue}`);
+  }
+
+  async getAudioLevel(level: string): Promise<number> {
+    try {
+      const response = await this.sendCommand(`l ${level}`);
+      const value = parseFloat(response);
+      // Convert 0.0-1.0 back to 0-100 range
+      return Math.round(value * 100);
+    } catch (error) {
+      return 0; // Default value if level not supported
+    }
+  }
+
+  // Specific Audio Controls
+  async setVolume(volume: number): Promise<void> {
+    await this.setAudioLevel('AF', volume);
+  }
+
+  async getVolume(): Promise<number> {
+    return await this.getAudioLevel('AF');
+  }
+
+  async setRFGain(gain: number): Promise<void> {
+    await this.setAudioLevel('RF', gain);
+  }
+
+  async getRFGain(): Promise<number> {
+    return await this.getAudioLevel('RF');
+  }
+
+  async setMicGain(gain: number): Promise<void> {
+    await this.setAudioLevel('MICGAIN', gain);
+  }
+
+  async getMicGain(): Promise<number> {
+    return await this.getAudioLevel('MICGAIN');
+  }
+
+  async setSquelch(squelch: number): Promise<void> {
+    await this.setAudioLevel('SQL', squelch);
+  }
+
+  async getSquelch(): Promise<number> {
+    return await this.getAudioLevel('SQL');
+  }
+
+  async setVOXGain(gain: number): Promise<void> {
+    await this.setAudioLevel('VOXGAIN', gain);
+  }
+
+  async getVOXGain(): Promise<number> {
+    return await this.getAudioLevel('VOXGAIN');
+  }
+
+  async setCompressor(level: number): Promise<void> {
+    await this.setAudioLevel('COMP', level);
+  }
+
+  async getCompressor(): Promise<number> {
+    return await this.getAudioLevel('COMP');
+  }
+
+  async setNoiseReduction(level: number): Promise<void> {
+    await this.setAudioLevel('NR', level);
+  }
+
+  async getNoiseReduction(): Promise<number> {
+    return await this.getAudioLevel('NR');
+  }
+
+  async setAGC(mode: number): Promise<void> {
+    await this.setAudioLevel('AGC', mode);
+  }
+
+  async getAGC(): Promise<number> {
+    return await this.getAudioLevel('AGC');
+  }
+
+  // Audio Function Controls
+  async setVOX(enabled: boolean): Promise<void> {
+    await this.sendCommand(`U VOX ${enabled ? 1 : 0}`);
+  }
+
+  async getVOX(): Promise<boolean> {
+    try {
+      const response = await this.sendCommand(`u VOX`);
+      return parseInt(response) === 1;
+    } catch (error) {
+      return false;
+    }
+  }
+
   async pollRadioState(): Promise<RadioState> {
     try {
       // Poll each value individually with error handling

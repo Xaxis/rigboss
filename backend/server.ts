@@ -232,6 +232,71 @@ app.get('/api/audio/devices', async (req, res) => {
   }
 });
 
+// Radio Audio Control Endpoints
+app.post('/api/radio/audio/level', async (req, res) => {
+  try {
+    const { level, value } = req.body;
+
+    if (!level || typeof value !== 'number') {
+      return res.status(400).json({ error: 'Invalid level or value' });
+    }
+
+    if (!rigctlService.isConnected()) {
+      return res.status(503).json({ error: 'Radio not connected' });
+    }
+
+    await rigctlService.setAudioLevel(level, value);
+    res.json({ success: true, level, value });
+  } catch (error) {
+    console.error('Audio level error:', error);
+    res.status(500).json({ error: 'Failed to set audio level' });
+  }
+});
+
+app.get('/api/radio/audio/level/:level', async (req, res) => {
+  try {
+    const { level } = req.params;
+
+    if (!rigctlService.isConnected()) {
+      return res.status(503).json({ error: 'Radio not connected' });
+    }
+
+    const value = await rigctlService.getAudioLevel(level);
+    res.json({ level, value });
+  } catch (error) {
+    console.error('Audio level get error:', error);
+    res.status(500).json({ error: 'Failed to get audio level' });
+  }
+});
+
+app.post('/api/radio/audio/function', async (req, res) => {
+  try {
+    const { function: func, enabled } = req.body;
+
+    if (!func || typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Invalid function or enabled value' });
+    }
+
+    if (!rigctlService.isConnected()) {
+      return res.status(503).json({ error: 'Radio not connected' });
+    }
+
+    // Handle different audio functions
+    switch (func.toUpperCase()) {
+      case 'VOX':
+        await rigctlService.setVOX(enabled);
+        break;
+      default:
+        return res.status(400).json({ error: 'Unsupported audio function' });
+    }
+
+    res.json({ success: true, function: func, enabled });
+  } catch (error) {
+    console.error('Audio function error:', error);
+    res.status(500).json({ error: 'Failed to set audio function' });
+  }
+});
+
 app.post('/api/connect', async (req, res) => {
   try {
     const { host, port } = req.body;

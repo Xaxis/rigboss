@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { AudioEngine } from '@/audio/AudioEngine';
+import RadioAudioControls from './RadioAudioControls';
 
 const AudioSystem: React.FC = () => {
   const {
@@ -288,6 +289,9 @@ const AudioSystem: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Radio Audio Controls */}
+      <RadioAudioControls />
 
       {/* Audio Quality & Connection Info */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
