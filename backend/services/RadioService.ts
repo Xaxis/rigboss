@@ -59,8 +59,16 @@ export class RadioService extends BaseService implements IRadioService {
 
   // IRadioService implementation
   async connect(host: string, port: number): Promise<void> {
+    console.log('[RadioService] connect() called with:', { host, port });
     try {
       // Update rigctl service config
+      console.log('[RadioService] Creating new RigctlService with config:', {
+        host,
+        port,
+        reconnectInterval: 5000,
+        commandTimeout: this.config.commandTimeout || 3000
+      });
+
       this.rigctlService = new RigctlService({
         host,
         port,
@@ -68,13 +76,21 @@ export class RadioService extends BaseService implements IRadioService {
         commandTimeout: this.config.commandTimeout || 3000
       });
 
+      console.log('[RadioService] Calling rigctlService.connect()');
       await this.rigctlService.connect();
+      console.log('[RadioService] rigctlService.connect() successful');
+
       this.emitEvent('connected', { host, port });
+      console.log('[RadioService] Emitted connected event');
 
       // Get initial state
+      console.log('[RadioService] Getting initial state');
       const state = await this.getState();
+      console.log('[RadioService] Got initial state:', state);
       this.emitEvent('state_changed', state);
+      console.log('[RadioService] Emitted state_changed event');
     } catch (error) {
+      console.error('[RadioService] connect() failed:', error);
       this.emitEvent('connection_failed', { host, port, error: error instanceof Error ? error.message : 'Unknown error' });
       throw error;
     }

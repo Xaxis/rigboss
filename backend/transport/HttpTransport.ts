@@ -101,19 +101,24 @@ export class HttpTransport {
     const router = express.Router();
 
     router.post('/connect', async (req, res) => {
+      console.log('[HttpTransport] POST /api/radio/connect called with:', req.body);
       try {
         const radioService = this.serviceRegistry.get('radio');
         if (!radioService) {
+          console.log('[HttpTransport] Radio service not available');
           return res.status(503).json({ success: false, error: 'Radio service not available' });
         }
 
         const { host, port } = req.body;
+        console.log('[HttpTransport] Calling radioService.connect with:', { host, port });
         await (radioService as any).connect(host, port);
+        console.log('[HttpTransport] Radio service connect successful');
         res.json({ success: true });
       } catch (error) {
-        res.status(500).json({ 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Connection failed' 
+        console.error('[HttpTransport] Radio connect error:', error);
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Connection failed'
         });
       }
     });
