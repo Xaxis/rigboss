@@ -75,9 +75,9 @@ const AudioSystem: React.FC = () => {
   useEffect(() => {
     const initAudio = async () => {
       try {
-        // Check if we're in a browser environment with media devices
-        if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
-          console.warn('Media devices not available (SSR or unsupported browser)');
+        // Double-check we're in browser with secure context
+        if (typeof window === 'undefined' || !window.navigator?.mediaDevices) {
+          console.warn('Media devices not available - requires HTTPS or localhost');
           return;
         }
 
@@ -87,8 +87,8 @@ const AudioSystem: React.FC = () => {
         const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
         setAudioDevices([...audioInputs, ...audioOutputs]);
 
-        // Create audio context
-        const context = new AudioContext();
+        // Create audio context (user gesture may be required)
+        const context = new (window.AudioContext || (window as any).webkitAudioContext)();
         setAudioContext(context);
 
         addToast({
@@ -100,17 +100,16 @@ const AudioSystem: React.FC = () => {
       } catch (error) {
         console.error('Audio initialization failed:', error);
         addToast({
-          type: 'error',
-          title: 'Audio System Error',
-          message: 'Failed to initialize audio system',
+          type: 'warning',
+          title: 'Audio System',
+          message: 'Audio requires user interaction - click Start Audio',
         });
       }
     };
 
-    // Only run in browser
-    if (typeof window !== 'undefined') {
-      initAudio();
-    }
+    // Delay to ensure we're fully client-side
+    const timer = setTimeout(initAudio, 100);
+    return () => clearTimeout(timer);
 
     return () => {
       if (audioStream) {
@@ -151,16 +150,20 @@ const AudioSystem: React.FC = () => {
 
   const startAudio = async () => {
     try {
-      if (!audioContext) return;
-
       // Check if media devices are available
-      if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+      if (typeof window === 'undefined' || !window.navigator?.mediaDevices) {
         addToast({
           type: 'error',
           title: 'Audio Error',
-          message: 'Media devices not available in this environment',
+          message: 'Media devices not available - requires HTTPS or localhost',
         });
         return;
+      }
+
+      // Create audio context if not exists (user gesture required)
+      if (!audioContext) {
+        const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+        setAudioContext(context);
       }
 
       const constraints = {

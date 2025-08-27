@@ -73,16 +73,16 @@ const Toast: React.FC<ToastProps> = ({
   const toastContent = (
     <div
       className={`
-        fixed top-4 right-4 z-50 max-w-sm w-full
+        max-w-sm w-full
         transform transition-all duration-300 ease-in-out
-        ${isVisible && !isLeaving 
-          ? 'translate-x-0 opacity-100' 
+        ${isVisible && !isLeaving
+          ? 'translate-x-0 opacity-100'
           : 'translate-x-full opacity-0'
         }
       `}
     >
       <div className={`
-        ${style.bg} ${style.border} 
+        ${style.bg} ${style.border}
         border rounded-lg shadow-lg p-4
       `}>
         <div className="flex items-start">
@@ -137,17 +137,20 @@ interface ToastManagerProps {
 
 export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) => {
   return (
-    <>
+    <div className="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
       {toasts.map((toast, index) => (
         <div
           key={toast.id}
-          style={{ top: `${1 + index * 5}rem` }}
-          className="relative"
+          style={{
+            zIndex: 50 + index,
+            transform: `translateY(${index * 4}px)`
+          }}
+          className="relative pointer-events-auto"
         >
           <Toast {...toast} onClose={onRemove} />
         </div>
       ))}
-    </>
+    </div>
   );
 };
 
