@@ -44,8 +44,12 @@ spectrumService.connectToAudioService(audioService);
 // Create transport layers
 const httpTransport = new HttpTransport(serviceRegistry, server);
 
-// Create socket transport (handles all socket connections and events)
-const socketTransport = new SocketTransport(io, serviceRegistry);
+// Bind Express app to the HTTP server so REST endpoints are served
+server.removeAllListeners('request');
+server.on('request', httpTransport.getApp());
+
+// Initialize Socket.IO transport (handles all socket connections and events)
+new SocketTransport(io, serviceRegistry);
 
 // CRITICAL: Set up radio service event forwarding for legacy frontend compatibility
 function setupRadioEventForwarding() {
