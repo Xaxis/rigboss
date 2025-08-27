@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import { RigctlService } from './services/RigctlService.js';
 import type { WebSocketMessage, RadioState, AppConfig } from '../src/types/radio.js';
+import { WebRTCAudioService } from './services/WebRTCAudioService.js';
 
 const app = express();
 const server = createServer(app);
@@ -41,7 +42,7 @@ let pollingInterval: NodeJS.Timeout | null = null;
 // Radio state polling
 function startPolling() {
   if (pollingInterval) return;
-  
+
   pollingInterval = setInterval(async () => {
     try {
       if (rigctlService.isConnected()) {
@@ -61,6 +62,13 @@ function stopPolling() {
   }
 }
 
+// Optional WebRTC audio service (feature-gated)
+let audioService: WebRTCAudioService | null = null;
+(async () => {
+  audioService = new WebRTCAudioService(io);
+  await audioService.init();
+  audioService.attachNamespace();
+})();
 // rigctld event handlers
 rigctlService.on('connected', () => {
   console.log('rigctld connected');
@@ -117,42 +125,42 @@ io.on('connection', (socket) => {
           await rigctlService.setFrequency(parameters[0]);
           result = { success: true };
           break;
-          
+
         case 'set_mode':
           await rigctlService.setMode(parameters[0], parameters[1]);
           result = { success: true };
           break;
-          
+
         case 'set_power':
           await rigctlService.setPowerLevel(parameters[0]);
           result = { success: true };
           break;
-          
+
         case 'set_ptt':
           await rigctlService.setPTT(parameters[0]);
           result = { success: true };
           break;
-          
+
         case 'get_frequency':
           result = await rigctlService.getFrequency();
           break;
-          
+
         case 'get_mode':
           result = await rigctlService.getMode();
           break;
-          
+
         case 'get_power':
           result = await rigctlService.getPowerLevel();
           break;
-          
+
         case 'get_ptt':
           result = await rigctlService.getPTT();
           break;
-          
+
         case 'get_radio_info':
           result = await rigctlService.getRadioInfo();
           break;
-          
+
         default:
           throw new Error(`Unknown command: ${command}`);
       }
@@ -160,9 +168,9 @@ io.on('connection', (socket) => {
       socket.emit('response', { success: true, data: result });
     } catch (error) {
       console.error('Command error:', error);
-      socket.emit('response', { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      socket.emit('response', {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
@@ -242,12 +250,12 @@ app.get('/api/radio/state', async (req, res) => {
     if (!rigctlService.isConnected()) {
       return res.status(503).json({ error: 'Not connected to radio' });
     }
-    
+
     const state = await rigctlService.pollRadioState();
     res.json(state);
   } catch (error) {
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -258,12 +266,12 @@ app.post('/api/radio/frequency', async (req, res) => {
     if (typeof frequency !== 'number') {
       return res.status(400).json({ error: 'Invalid frequency' });
     }
-    
+
     await rigctlService.setFrequency(frequency);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -274,8 +282,8 @@ app.post('/api/radio/mode', async (req, res) => {
     await rigctlService.setMode(mode, bandwidth);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -284,10 +292,12 @@ app.post('/api/radio/ptt', async (req, res) => {
   try {
     const { enabled } = req.body;
     await rigctlService.setPTT(enabled);
+    // Gate audio TX path as well (if available)
+    if (audioService) audioService.setTxEnabled(!!enabled);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

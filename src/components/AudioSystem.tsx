@@ -4,6 +4,7 @@ import Button from './ui/Button';
 import Input from './ui/Input';
 import LiveIndicator from './ui/LiveIndicator';
 
+import { AudioEngine } from '@/audio/AudioEngine';
 const AudioSystem: React.FC = () => {
   const {
     audioContext,
@@ -30,6 +31,25 @@ const AudioSystem: React.FC = () => {
   const [micMuted, setMicMuted] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [vuMeterMic, setVuMeterMic] = useState(0);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const engineRef = useRef<AudioEngine | null>(null);
+
+  // Start minimal RX engine on mount (non-blocking)
+  useEffect(() => {
+    const engine = new AudioEngine({
+      onAvailable: (available) => {
+        if (!available) {
+          addToast({ type: 'warning', title: 'Audio transport unavailable', message: 'Server missing WebRTC runtime. RX/TX will be disabled.' });
+        }
+      },
+      onError: (msg) => addToast({ type: 'error', title: 'Audio error', message: msg })
+    });
+    engineRef.current = engine;
+    if (audioElRef.current) engine.attachOutputElement(audioElRef.current);
+    engine.start().catch(() => {/* ignore */});
+    return () => { engine.stop().catch(() => {}); };
+  }, []);
+
   const [vuMeterSpeaker, setVuMeterSpeaker] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number>();
@@ -197,9 +217,9 @@ const AudioSystem: React.FC = () => {
           Audio System
         </h3>
         <div className="flex items-center space-x-2">
-          <LiveIndicator 
-            active={audioEnabled} 
-            label="Audio Active" 
+          <LiveIndicator
+            active={audioEnabled}
+            label="Audio Active"
             color="green"
             pulse={true}
           />
@@ -220,7 +240,7 @@ const AudioSystem: React.FC = () => {
         {/* Microphone Section */}
         <div className="space-y-4">
           <h4 className="font-medium text-gray-900 dark:text-white">Microphone</h4>
-          
+
           {/* Device Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -290,7 +310,7 @@ const AudioSystem: React.FC = () => {
         {/* Speaker Section */}
         <div className="space-y-4">
           <h4 className="font-medium text-gray-900 dark:text-white">Speaker</h4>
-          
+
           {/* Device Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -373,7 +393,7 @@ const AudioSystem: React.FC = () => {
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">AGC</span>
           </label>
-          
+
           <label className="flex items-center">
             <input
               type="checkbox"
@@ -385,7 +405,7 @@ const AudioSystem: React.FC = () => {
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">Noise Blanker</span>
           </label>
-          
+
           <label className="flex items-center">
             <input
               type="checkbox"
@@ -395,9 +415,11 @@ const AudioSystem: React.FC = () => {
               })}
               className="mr-2"
             />
+            {/* Hidden audio element for radio RX playback */}
+            <audio ref={audioElRef as any} className="hidden" />
             <span className="text-sm text-gray-700 dark:text-gray-300">Noise Reduction</span>
           </label>
-          
+
           <label className="flex items-center">
             <input
               type="checkbox"
