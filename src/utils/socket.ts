@@ -19,11 +19,22 @@ class SocketService {
         return;
       }
 
-      // Default to same-origin Socket.IO (works on Pi via Astro dev proxy)
-      const resolvedUrl = url ?? (typeof __BACKEND_URL__ !== 'undefined' ? __BACKEND_URL__ : undefined);
-      this.socket = io(resolvedUrl as any, {
+      // Auto-detect backend URL based on current location
+      let resolvedUrl = url;
+      if (!resolvedUrl) {
+        const currentHost = window.location.hostname;
+        const currentPort = window.location.port;
+        if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+          // Local dev: backend on 3001
+          resolvedUrl = 'http://localhost:3001';
+        } else {
+          // Pi deployment: same host, port 3001
+          resolvedUrl = `http://${currentHost}:3001`;
+        }
+      }
+      this.socket = io(resolvedUrl, {
         path: '/socket.io',
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'], // Try polling first
         timeout: 5000,
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
