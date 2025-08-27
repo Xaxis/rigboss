@@ -81,7 +81,8 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
     }
-    this.listeners.clear();
+    // Preserve listeners across reconnects so UI stays wired after Connect
+    // (listeners are registered in AppLayout once on mount)
   }
 
   // Event emitter functionality

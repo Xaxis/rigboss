@@ -55,11 +55,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         const healthRes = await fetch(`${backendConfig.apiUrl}/health`);
         if (healthRes.ok) {
           const health = await healthRes.json();
-          // New modular backend health structure
-          const radioHealth = health.data?.health?.radio || health.health?.radio;
-          const isRadioConnected = radioHealth?.details?.rigctldConnected;
-          setRadioConnected(!!isRadioConnected);
-          if (isRadioConnected) return; // already connected, no modal
+          // Modular backend health structure: { data: { health: { radio: ServiceMetadata } } }
+          const services = health.data?.health || health.health;
+          const radioMeta = services?.radio;
+          const isRadioConnected = radioMeta?.health?.details?.rigctldConnected;
+          if (typeof isRadioConnected === 'boolean') {
+            setRadioConnected(isRadioConnected);
+            if (isRadioConnected) return; // already connected, no modal
+          }
         }
 
         // 4) Auto-connect to local rigctld on the backend
@@ -90,12 +93,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         setActiveModal('connection');
       }
     };
-
-    initializeConnection();
-
-    // Set up event listeners
-    socketService.on('connected', setBackendConnected);
-    socketService.on('radio_state', setRadioState);
+    // Set up event listeners BEFORE initializing connection to avoid race conditions
+    socketService.on('connected', (isConnected: boolean) => {
+      setBackendConnected(isConnected);
+    });
+    socketService.on('radio_state', (state: any) => {
+      setRadioState(state);
+      setRadioConnected(true); // receiving state implies radio is online
+    });
     socketService.on('connection_status', (status: { connected: boolean; radio?: string }) => {
       setRadioConnected(status.connected);
       if (status.radio) {
@@ -111,6 +116,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       });
       setTimeout(() => setError(null), 5000); // Clear error after 5 seconds
     });
+
+    // Now initialize connection
+    initializeConnection();
 
     return () => {
       socketService.disconnect();
@@ -156,13 +164,34 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         throw new Error(result.error || 'Connection failed');
       }
 
+      // Optimistically mark radio as connected; socket events and health will confirm
+      setRadioConnected(true);
+
+      // Immediately fetch current radio state and update UI
+      try {
+        const stateRes = await fetch(`${backendConfig.apiUrl}/radio/state`);
+        if (stateRes.ok) {
+          const stateJson = await stateRes.json();
+          const state = stateJson.state || stateJson.data?.state || stateJson.data;
+          if (state) {
+            setRadioState(state);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch radio state after connection:', e);
+      }
+
       // Wait a moment for backend to emit connection_status, then check health as fallback
       setTimeout(async () => {
         try {
           const healthRes = await fetch(`${backendConfig.apiUrl}/health`);
           if (healthRes.ok) {
             const health = await healthRes.json();
-            setRadioConnected(!!health?.rigctld?.connected);
+            const radioHealth = health.data?.health?.radio || health.health?.radio;
+            const isRadioConnected = radioHealth?.details?.rigctldConnected;
+            if (typeof isRadioConnected === 'boolean') {
+              setRadioConnected(isRadioConnected);
+            }
           }
         } catch (e) {
           console.warn('Failed to check health after connection:', e);
