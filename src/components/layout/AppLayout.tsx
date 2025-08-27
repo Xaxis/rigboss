@@ -55,14 +55,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         const healthRes = await fetch(`${backendConfig.apiUrl}/health`);
         if (healthRes.ok) {
           const health = await healthRes.json();
-          setRadioConnected(!!health?.rigctld?.connected);
-          if (health?.rigctld?.connected) return; // already connected, no modal
+          // New modular backend health structure
+          const radioHealth = health.data?.health?.radio || health.health?.radio;
+          const isRadioConnected = radioHealth?.details?.rigctldConnected;
+          setRadioConnected(!!isRadioConnected);
+          if (isRadioConnected) return; // already connected, no modal
         }
 
         // 4) Auto-connect to local rigctld on the backend
         try {
           setConnecting(true);
-          const res = await fetch(`${backendConfig.apiUrl}/connect`, {
+          const res = await fetch(`${backendConfig.apiUrl}/radio/connect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ host: 'localhost', port: 4532 })
@@ -92,12 +95,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
     // Set up event listeners
     socketService.on('connected', setBackendConnected);
-    socketService.on('radio_state', (state) => {
-      console.log('[AppLayout] Received radio_state:', state);
-      setRadioState(state);
-    });
+    socketService.on('radio_state', setRadioState);
     socketService.on('connection_status', (status: { connected: boolean; radio?: string }) => {
-      console.log('[AppLayout] Received connection_status:', status);
       setRadioConnected(status.connected);
       if (status.radio) {
         setRadioState({ model: status.radio });
@@ -129,7 +128,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       await socketService.connect();
       setBackendConnected(true);
 
-      const response = await fetch(`${backendConfig.apiUrl}/connect`, {
+      const response = await fetch(`${backendConfig.apiUrl}/radio/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
