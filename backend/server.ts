@@ -9,9 +9,11 @@ import { WebRTCAudioService } from './services/WebRTCAudioService.js';
 const app = express();
 const server = createServer(app);
 const io = new SocketIOServer(server, {
+  path: '/socket.io',
   cors: {
-    origin: process.env.NODE_ENV === 'production' ? false : ['http://localhost:3000'],
-    methods: ['GET', 'POST']
+    origin: true, // allow LAN/dev by default; Astro dev proxy handles same-origin
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 

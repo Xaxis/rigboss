@@ -1,6 +1,10 @@
 import { io, Socket } from 'socket.io-client';
 import type { WebSocketMessage, RadioState, RigctlCommand } from '@/types/radio';
 
+// Provided by Vite define() in astro.config.mjs when present
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare const __BACKEND_URL__: string | undefined;
+
 class SocketService {
   private socket: Socket | null = null;
   private listeners: Map<string, Set<Function>> = new Map();
@@ -8,14 +12,17 @@ class SocketService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
 
-  connect(url: string = 'http://localhost:3001'): Promise<void> {
+  connect(url?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.socket?.connected) {
         resolve();
         return;
       }
 
-      this.socket = io(url, {
+      // Default to same-origin Socket.IO (works on Pi via Astro dev proxy)
+      const resolvedUrl = url ?? (typeof __BACKEND_URL__ !== 'undefined' ? __BACKEND_URL__ : undefined);
+      this.socket = io(resolvedUrl as any, {
+        path: '/socket.io',
         transports: ['websocket', 'polling'],
         timeout: 5000,
         reconnection: true,
