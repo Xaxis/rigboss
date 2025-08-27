@@ -21,21 +21,44 @@ const AudioSystem: React.FC = () => {
   // Initialize audio devices
   useEffect(() => {
     const initAudio = async () => {
-      if (typeof window === 'undefined' || !window.navigator?.mediaDevices) {
-        console.warn('Media devices not available');
+      if (typeof window === 'undefined') return;
+
+      // Check if we're on HTTPS or localhost (required for audio devices)
+      const isSecureContext = window.isSecureContext || window.location.hostname === 'localhost';
+
+      if (!isSecureContext) {
+        console.warn('Not in secure context - audio devices may be limited');
+        addToast({
+          type: 'warning',
+          title: 'Secure Connection Required',
+          message: 'For full audio device access, use HTTPS or localhost. Basic audio will still work.'
+        });
+
+        // Provide fallback default devices
+        setAudioDevices([
+          { deviceId: 'default', kind: 'audioinput', label: 'Default Microphone', groupId: '' } as MediaDeviceInfo,
+          { deviceId: 'default', kind: 'audiooutput', label: 'Default Speakers', groupId: '' } as MediaDeviceInfo
+        ]);
+        setSelectedMicrophone('default');
+        setSelectedSpeaker('default');
+        return;
+      }
+
+      if (!window.navigator?.mediaDevices) {
+        console.warn('Media devices API not available');
+        addToast({
+          type: 'error',
+          title: 'Audio Not Supported',
+          message: 'Your browser does not support audio device access.'
+        });
         return;
       }
 
       try {
         // Request permission first to get device labels
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-          .then(stream => {
-            // Stop the stream immediately, we just needed permission
-            stream.getTracks().forEach(track => track.stop());
-          })
-          .catch(() => {
-            console.warn('Microphone permission denied, device labels may be limited');
-          });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        // Stop the stream immediately, we just needed permission
+        stream.getTracks().forEach(track => track.stop());
 
         const devices = await navigator.mediaDevices.enumerateDevices();
         console.log('Found audio devices:', devices);
@@ -58,10 +81,19 @@ const AudioSystem: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to get audio devices:', error);
+
+        // Fallback to default devices if permission denied
+        setAudioDevices([
+          { deviceId: 'default', kind: 'audioinput', label: 'Default Microphone', groupId: '' } as MediaDeviceInfo,
+          { deviceId: 'default', kind: 'audiooutput', label: 'Default Speakers', groupId: '' } as MediaDeviceInfo
+        ]);
+        setSelectedMicrophone('default');
+        setSelectedSpeaker('default');
+
         addToast({
-          type: 'error',
-          title: 'Audio Device Error',
-          message: 'Failed to access audio devices. Check browser permissions.'
+          type: 'warning',
+          title: 'Using Default Audio',
+          message: 'Using default audio devices. Grant microphone permission for device selection.'
         });
       }
     };
@@ -145,7 +177,10 @@ const AudioSystem: React.FC = () => {
           <div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Radio Audio</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Talk into your laptop mic → Radio transmits | Radio receives → Your laptop speakers
+              Your laptop microphone → Pi → Radio transmits | Radio receives → Pi → Your laptop speakers
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Audio devices below are your laptop's microphone and speakers (not the radio's)
             </p>
           </div>
           <button
@@ -274,14 +309,16 @@ const AudioSystem: React.FC = () => {
             </div>
           )}
 
-          {/* Debug Info */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-xs">
-            <p><strong>Debug:</strong></p>
-            <p>Total devices found: {audioDevices.length}</p>
-            <p>Microphones: {microphones.length}</p>
-            <p>Speakers: {speakers.length}</p>
-            <p>Selected mic: {selectedMicrophone || 'none'}</p>
-            <p>Selected speaker: {selectedSpeaker || 'none'}</p>
+          {/* Connection Info */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>💡 How it works:</strong> Your laptop's microphone and speakers connect to the Pi's radio via network audio streaming.
+              {!window.isSecureContext && window.location.hostname !== 'localhost' && (
+                <span className="block mt-1 text-xs">
+                  Note: For full device selection, access via HTTPS or localhost. Default devices will work fine.
+                </span>
+              )}
+            </p>
           </div>
         </div>
       </div>
