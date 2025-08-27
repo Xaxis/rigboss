@@ -37,6 +37,12 @@ Done. Next steps:
    cd /opt/rigboss && npm run dev
 
 3) From your laptop: open http://<pi-ip>:3000
-   In Connection modal, connect to host=localhost port=4532
+   The app will auto-connect to rigctld and enable cross-platform audio streaming.
+
+Audio devices:
+- Linux: Uses ALSA (plughw:1,0 for USB audio)
+- macOS: Uses AVFoundation (:0 for default)
+- Windows: Uses DirectShow (audio= for default)
+- All platforms require ffmpeg for audio streaming
 EOF
 

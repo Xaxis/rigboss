@@ -10,6 +10,7 @@ import PTTButton from './PTTButton';
 import BandSelector from './BandSelector';
 import MemoryChannels from './MemoryChannels';
 import AudioSystem from './AudioSystem';
+import { AudioEngine } from '@/audio/AudioEngine';
 import SpectrumDisplay from './SpectrumDisplay';
 import ActivityLogs from './ActivityLogs';
 import MiniSpectrum from './MiniSpectrum';
@@ -142,11 +143,19 @@ const RadioInterface: React.FC = () => {
     try {
       setError(null);
       setLastCommand(enabled ? 'PTT ON' : 'PTT OFF');
+
+      // Control both rigctl and audio engine
       await socketService.setPTT(enabled);
+
+      // Also control audio engine PTT for mic transmission
+      // Note: AudioEngine instance is in AudioSystem component
+      // We'll emit a custom event for now
+      window.dispatchEvent(new CustomEvent('ptt-change', { detail: { enabled } }));
+
       addToast({
         type: enabled ? 'warning' : 'info',
         title: enabled ? 'Transmitting' : 'Receive Mode',
-        message: enabled ? 'PTT activated' : 'PTT released',
+        message: enabled ? 'PTT activated - mic audio streaming' : 'PTT released',
         duration: 1500,
       });
     } catch (error) {

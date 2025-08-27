@@ -6,12 +6,14 @@ export type AudioEngineEvents = {
   onError?: (message: string) => void;
 };
 
-// Minimal front-end engine for signaling and media wiring.
+// Cross-platform audio engine using WebSocket + raw audio
 export class AudioEngine {
   private socket: Socket | null = null;
-  private pc: RTCPeerConnection | null = null;
+  private audioContext: AudioContext | null = null;
   private remoteAudioEl: HTMLAudioElement | null = null;
   private events: AudioEngineEvents;
+  private micStream: MediaStream | null = null;
+  private isTransmitting = false;
 
   constructor(events: AudioEngineEvents = {}) {
     this.events = events;
@@ -21,9 +23,17 @@ export class AudioEngine {
     this.remoteAudioEl = el;
   }
 
-  async start(signalingUrl = 'http://localhost:3001/webrtc'): Promise<void> {
-    // Socket.IO namespace used only for signaling
-    this.socket = io(signalingUrl, { path: '/socket.io' });
+  async start(): Promise<void> {
+    // Auto-detect backend URL like the main socket service
+    const currentHost = window.location.hostname;
+    let backendUrl: string;
+    if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+      backendUrl = 'http://localhost:3001/audio';
+    } else {
+      backendUrl = `http://${currentHost}:3001/audio`;
+    }
+
+    this.socket = io(backendUrl, { path: '/socket.io' });
 
     await new Promise<void>((resolve, reject) => {
       this.socket!.on('connect', () => resolve());
@@ -32,48 +42,122 @@ export class AudioEngine {
 
     this.socket.on('server-capabilities', (cap: { available: boolean }) => {
       this.events.onAvailable?.(cap.available);
+      if (cap.available) {
+        this.socket?.emit('start-audio');
+      }
     });
 
-    this.socket.on('server-answer', async (answer: RTCSessionDescriptionInit) => {
-      if (!this.pc) return;
-      await this.pc.setRemoteDescription(answer);
+    this.socket.on('audio-started', () => {
       this.events.onConnected?.();
     });
 
-    this.socket.on('server-ice', async (cand: RTCIceCandidateInit) => {
-      if (!this.pc) return;
-      try { await this.pc.addIceCandidate(cand); } catch {}
+    this.socket.on('audio-data', (audioData: ArrayBuffer) => {
+      this.playAudioData(audioData);
     });
 
-    this.socket.on('webrtc-error', (e: { message: string }) => {
+    this.socket.on('audio-error', (e: { message: string }) => {
       this.events.onError?.(e.message);
     });
 
-    await this.createOffer();
+    // Initialize audio context for playback
+    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+
+  private async playAudioData(audioData: ArrayBuffer): Promise<void> {
+    if (!this.audioContext || !this.remoteAudioEl) return;
+
+    try {
+      // Convert raw PCM to AudioBuffer
+      const audioBuffer = await this.audioContext.decodeAudioData(audioData);
+
+      // Create a source and play it
+      const source = this.audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.audioContext.destination);
+      source.start();
+    } catch (e) {
+      // Raw PCM data - need to create AudioBuffer manually
+      const samples = new Int16Array(audioData);
+      const audioBuffer = this.audioContext.createBuffer(1, samples.length, 48000);
+      const channelData = audioBuffer.getChannelData(0);
+
+      // Convert Int16 to Float32
+      for (let i = 0; i < samples.length; i++) {
+        channelData[i] = samples[i] / 32768.0;
+      }
+
+      const source = this.audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.audioContext.destination);
+      source.start();
+    }
+  }
+
+  async startMicCapture(deviceId?: string): Promise<void> {
+    try {
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: deviceId ? { exact: deviceId } : undefined }
+      });
+    } catch (e) {
+      this.events.onError?.('Failed to access microphone');
+    }
+  }
+
+  async setPTT(enabled: boolean): Promise<void> {
+    this.isTransmitting = enabled;
+
+    if (enabled && this.micStream) {
+      // Start sending mic data
+      this.startMicTransmission();
+    } else {
+      // Stop sending mic data
+      this.stopMicTransmission();
+    }
+  }
+
+  private startMicTransmission(): void {
+    if (!this.micStream || !this.audioContext) return;
+
+    const source = this.audioContext.createMediaStreamSource(this.micStream);
+    const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+    processor.onaudioprocess = (e) => {
+      if (!this.isTransmitting) return;
+
+      const inputData = e.inputBuffer.getChannelData(0);
+      // Convert Float32 to Int16
+      const samples = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        samples[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+      }
+
+      this.socket?.emit('mic-data', samples.buffer);
+    };
+
+    source.connect(processor);
+    processor.connect(this.audioContext.destination);
+  }
+
+  private stopMicTransmission(): void {
+    // Mic transmission stops automatically when isTransmitting = false
   }
 
   async stop(): Promise<void> {
-    try { this.pc?.close(); } catch {}
-    this.pc = null;
-    if (this.socket?.connected) this.socket.disconnect();
+    if (this.micStream) {
+      this.micStream.getTracks().forEach(track => track.stop());
+      this.micStream = null;
+    }
+
+    if (this.socket?.connected) {
+      this.socket.emit('stop-audio');
+      this.socket.disconnect();
+    }
     this.socket = null;
-  }
 
-  async createOffer(): Promise<void> {
-    this.pc = new RTCPeerConnection({});
-    this.pc.onicecandidate = (ev) => {
-      if (ev.candidate) this.socket?.emit('client-ice', ev.candidate);
-    };
-    this.pc.ontrack = (ev) => {
-      if (this.remoteAudioEl) {
-        this.remoteAudioEl.srcObject = ev.streams[0] ?? new MediaStream([ev.track]);
-        this.remoteAudioEl.play().catch(() => {/* user gesture might be required */});
-      }
-    };
-
-    const offer = await this.pc.createOffer({ offerToReceiveAudio: true });
-    await this.pc.setLocalDescription(offer);
-    this.socket?.emit('client-offer', offer);
+    if (this.audioContext) {
+      await this.audioContext.close();
+      this.audioContext = null;
+    }
   }
 
   async setOutputDevice(deviceId: string | null) {

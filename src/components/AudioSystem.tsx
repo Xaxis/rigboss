@@ -34,21 +34,38 @@ const AudioSystem: React.FC = () => {
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const engineRef = useRef<AudioEngine | null>(null);
 
-  // Start minimal RX engine on mount (non-blocking)
+  // Start cross-platform audio engine on mount
   useEffect(() => {
     const engine = new AudioEngine({
       onAvailable: (available) => {
         if (!available) {
-          addToast({ type: 'warning', title: 'Audio transport unavailable', message: 'Server missing WebRTC runtime. RX/TX will be disabled.' });
+          addToast({ type: 'warning', title: 'Audio transport unavailable', message: 'Server missing ffmpeg. Install ffmpeg for audio streaming.' });
+        } else {
+          addToast({ type: 'success', title: 'Audio ready', message: 'Cross-platform audio streaming enabled' });
         }
+      },
+      onConnected: () => {
+        addToast({ type: 'success', title: 'Audio connected', message: 'Receiving radio audio' });
       },
       onError: (msg) => addToast({ type: 'error', title: 'Audio error', message: msg })
     });
     engineRef.current = engine;
     if (audioElRef.current) engine.attachOutputElement(audioElRef.current);
     engine.start().catch(() => {/* ignore */});
-    return () => { engine.stop().catch(() => {}); };
-  }, []);
+
+    // Listen for PTT events from RadioInterface
+    const handlePTTChange = (event: CustomEvent) => {
+      const { enabled } = event.detail;
+      engine.setPTT(enabled).catch(console.error);
+    };
+
+    window.addEventListener('ptt-change', handlePTTChange as EventListener);
+
+    return () => {
+      window.removeEventListener('ptt-change', handlePTTChange as EventListener);
+      engine.stop().catch(() => {});
+    };
+  }, [addToast]);
 
   const [vuMeterSpeaker, setVuMeterSpeaker] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -139,6 +156,11 @@ const AudioSystem: React.FC = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setAudioStream(stream);
 
+      // Start mic capture for the audio engine
+      if (engineRef.current) {
+        await engineRef.current.startMicCapture(selectedMicrophone || undefined);
+      }
+
       // Create analyser for VU meter
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -151,7 +173,7 @@ const AudioSystem: React.FC = () => {
       addToast({
         type: 'success',
         title: 'Audio Started',
-        message: 'Microphone is now active',
+        message: 'Microphone active - ready for TX/RX streaming',
         duration: 2000,
       });
     } catch (error) {
