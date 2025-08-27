@@ -38,8 +38,39 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   useEffect(() => {
     const initializeConnection = async () => {
       try {
+        // 1) Connect Socket.IO (same-origin)
         await socketService.connect();
         setBackendConnected(true);
+
+        // 2) Ask backend for current health; set radio state accordingly
+        const healthRes = await fetch('/api/health');
+        if (healthRes.ok) {
+          const health = await healthRes.json();
+          setRadioConnected(!!health?.rigctld?.connected);
+          if (health?.rigctld?.connected) return; // already connected, no modal
+        }
+
+        // 3) Auto-connect to local rigctld on the Pi
+        try {
+          setConnecting(true);
+          const res = await fetch('/api/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: 'localhost', port: 4532 })
+          });
+          const result = await res.json();
+          if (res.ok && result?.success) {
+            setRadioConnected(true);
+            return;
+          }
+        } catch {
+          // ignore and fall through to modal
+        } finally {
+          setConnecting(false);
+        }
+
+        // 4) If still not connected, show modal for user input
+        setActiveModal('connection');
       } catch (error) {
         console.error('Failed to connect to backend:', error);
         setError('Failed to connect to backend server');
@@ -71,7 +102,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     return () => {
       socketService.disconnect();
     };
-  }, [setBackendConnected, setRadioConnected, setRadioState, setError]);
+  }, [setBackendConnected, setRadioConnected, setRadioState, setError, setActiveModal, setConnecting, addToast]);
 
   // Handle connection to rigctld
   const handleConnect = async (host: string, port: number) => {
