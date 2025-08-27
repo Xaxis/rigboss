@@ -81,12 +81,31 @@ export class WebRTCAudioService {
     });
   }
 
-  private getAudioInputDevice(): string {
+  private async getAudioInputDevice(): Promise<string> {
     const os = platform();
     switch (os) {
       case 'linux':
-        // Try common USB audio device names for ham radios
-        return 'plughw:1,0'; // Usually the first USB audio device
+        // Try to detect available ALSA devices
+        try {
+          const { execSync } = require('child_process');
+          const output = execSync('arecord -l 2>/dev/null || echo "default"', { encoding: 'utf8' });
+
+          // Look for USB audio devices first
+          const usbMatch = output.match(/card (\d+).*USB/i);
+          if (usbMatch) {
+            return `plughw:${usbMatch[1]},0`;
+          }
+
+          // Fall back to first available card
+          const cardMatch = output.match(/card (\d+)/);
+          if (cardMatch) {
+            return `plughw:${cardMatch[1]},0`;
+          }
+
+          return 'default';
+        } catch {
+          return 'default';
+        }
       case 'darwin':
         return ':0'; // Default audio input on macOS
       case 'win32':
@@ -96,11 +115,31 @@ export class WebRTCAudioService {
     }
   }
 
-  private getAudioOutputDevice(): string {
+  private async getAudioOutputDevice(): Promise<string> {
     const os = platform();
     switch (os) {
       case 'linux':
-        return 'plughw:1,0'; // Same USB device for output
+        // Try to detect available ALSA devices
+        try {
+          const { execSync } = require('child_process');
+          const output = execSync('aplay -l 2>/dev/null || echo "default"', { encoding: 'utf8' });
+
+          // Look for USB audio devices first
+          const usbMatch = output.match(/card (\d+).*USB/i);
+          if (usbMatch) {
+            return `plughw:${usbMatch[1]},0`;
+          }
+
+          // Fall back to first available card
+          const cardMatch = output.match(/card (\d+)/);
+          if (cardMatch) {
+            return `plughw:${cardMatch[1]},0`;
+          }
+
+          return 'default';
+        } catch {
+          return 'default';
+        }
       case 'darwin':
         return ':0'; // Default audio output on macOS
       case 'win32':
@@ -114,7 +153,7 @@ export class WebRTCAudioService {
     if (!this.available) return;
     if (this.rxProcs.has(clientId)) return; // already started
 
-    const inputDevice = this.getAudioInputDevice();
+    const inputDevice = await this.getAudioInputDevice();
     const os = platform();
 
     let ffmpegArgs: string[];
@@ -189,7 +228,7 @@ export class WebRTCAudioService {
 
     // Start TX process if not already running
     if (!this.txProc) {
-      this.startTxProcess();
+      await this.startTxProcess();
     }
 
     // Send mic data to TX process
@@ -202,10 +241,10 @@ export class WebRTCAudioService {
     }
   }
 
-  private startTxProcess(): void {
+  private async startTxProcess(): Promise<void> {
     if (this.txProc) return;
 
-    const outputDevice = this.getAudioOutputDevice();
+    const outputDevice = await this.getAudioOutputDevice();
     const os = platform();
 
     let ffmpegArgs: string[];

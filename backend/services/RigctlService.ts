@@ -110,18 +110,24 @@ export class RigctlService extends EventEmitter {
   }
 
   private handleResponse(data: string): void {
+    if (!data || typeof data !== 'string') {
+      console.warn('Invalid response data from rigctld:', data);
+      return;
+    }
+
     const lines = data.trim().split('\n');
-    
+
     for (const line of lines) {
-      if (this.commandQueue.length > 0) {
+      if (line.trim() && this.commandQueue.length > 0) {
         const command = this.commandQueue.shift()!;
         clearTimeout(command.timeout);
-        
+
         // Parse response based on command type
         try {
           const result = this.parseResponse(line);
           command.resolve(result);
         } catch (error) {
+          console.warn('Response parse error:', error, 'for line:', line);
           command.reject(error as Error);
         }
       }
@@ -129,22 +135,30 @@ export class RigctlService extends EventEmitter {
   }
 
   private parseResponse(response: string): any {
+    if (!response || typeof response !== 'string') {
+      throw new Error('Invalid response: not a string');
+    }
+
     const trimmed = response.trim();
-    
+    if (!trimmed) {
+      throw new Error('Empty response from rigctld');
+    }
+
     // Handle error responses
     if (trimmed.startsWith('RPRT')) {
-      const code = parseInt(trimmed.split(' ')[1]);
+      const parts = trimmed.split(' ');
+      const code = parseInt(parts[1] || '-1');
       if (code !== 0) {
         throw new Error(`rigctld error: ${code}`);
       }
       return { success: true };
     }
-    
+
     // Handle numeric responses
     if (/^\d+$/.test(trimmed)) {
       return parseInt(trimmed);
     }
-    
+
     // Handle float responses
     if (/^\d+\.\d+$/.test(trimmed)) {
       return parseFloat(trimmed);
@@ -189,10 +203,19 @@ export class RigctlService extends EventEmitter {
 
   async getMode(): Promise<{ mode: RadioMode; bandwidth: number }> {
     const response = await this.sendCommand('m');
-    const [mode, bandwidth] = response.split(' ');
-    return { 
-      mode: mode as RadioMode, 
-      bandwidth: parseInt(bandwidth) 
+
+    // Handle case where response is not a string or is empty
+    if (typeof response !== 'string' || !response.trim()) {
+      throw new Error('Invalid mode response from rigctld');
+    }
+
+    const parts = response.trim().split(' ');
+    const mode = parts[0] || 'USB';
+    const bandwidth = parseInt(parts[1]) || 2400;
+
+    return {
+      mode: mode as RadioMode,
+      bandwidth
     };
   }
 
@@ -237,13 +260,12 @@ export class RigctlService extends EventEmitter {
 
   async pollRadioState(): Promise<RadioState> {
     try {
-      const [frequency, modeInfo, power, ptt, radioInfo] = await Promise.all([
-        this.getFrequency(),
-        this.getMode(),
-        this.getPowerLevel(),
-        this.getPTT(),
-        this.getRadioInfo()
-      ]);
+      // Poll each value individually with error handling
+      const frequency = await this.getFrequency().catch(() => this.currentRadioState.frequency || 14200000);
+      const modeInfo = await this.getMode().catch(() => ({ mode: 'USB' as RadioMode, bandwidth: 2400 }));
+      const power = await this.getPowerLevel().catch(() => this.currentRadioState.power || 0);
+      const ptt = await this.getPTT().catch(() => this.currentRadioState.ptt || false);
+      const radioInfo = await this.getRadioInfo().catch(() => ({ model: 'Unknown', version: 'Unknown' }));
 
       const state: RadioState = {
         frequency,
