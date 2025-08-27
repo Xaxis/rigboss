@@ -5,6 +5,7 @@ export type AudioEngineEvents = {
   onConnected?: () => void;
   onError?: (message: string) => void;
   onRxLevel?: (level: number) => void;
+  onPcmSamples?: (samples: Float32Array, sampleRate: number) => void; // new: feed spectrum
 };
 
 // Cross-platform audio engine using WebSocket + raw audio
@@ -100,7 +101,15 @@ export class AudioEngine {
       // Report audio level (0-100)
       this.events.onRxLevel?.(Math.min(100, maxLevel * 100));
 
+      // Push to local queue for audio playback
       this.audioQueue.push(floatSamples);
+
+      // Also expose PCM to spectrum service (if any)
+      this.events.onPcmSamples?.(floatSamples, 48000); // backend emits 48k s16le
+      try {
+        window.dispatchEvent(new CustomEvent('pcm-samples', { detail: { samples: floatSamples, sampleRate: 48000 } }));
+      } catch {}
+
 
       // Start continuous playback if not already playing
       if (!this.isPlaying) {

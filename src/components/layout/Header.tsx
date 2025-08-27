@@ -46,9 +46,10 @@ const Header: React.FC = () => {
         {/* Right Side */}
         <div className="flex items-center space-x-3">
           {/* Connection Status */}
-          <ConnectionStatus 
+          <ConnectionStatus
             backendConnected={backendConnected}
             radioConnected={radioConnected}
+            variant="compact"
           />
           
           {/* Connect Button */}

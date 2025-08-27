@@ -250,8 +250,47 @@ export class RigctlService extends EventEmitter {
 
   async getRadioInfo(): Promise<{ model: string; version: string }> {
     try {
-      const model = await this.sendCommand('_');
-      const version = await this.sendCommand('1');
+      // '_' = get_info (multi-line key:value)
+      const infoRaw = await this.sendCommand('_');
+      let model = 'Unknown';
+      let version = 'Unknown';
+
+      if (typeof infoRaw === 'string' && infoRaw.trim().length > 0) {
+        const lines = infoRaw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          const [kRaw, ...rest] = line.split(':');
+          const key = (kRaw || '').toLowerCase();
+          const val = rest.join(':').trim();
+          if (!val) continue;
+
+          // Try common keys produced by various backends
+          if (key.includes('model') || key.includes('rig') || key.includes('radio')) {
+            // Avoid capturing unrelated lines by preferring explicit matches first
+            if (key === 'model' || key === 'rig' || key === 'radio' || key.includes('rig model')) {
+              model = val;
+            } else if (model === 'Unknown') {
+              model = val;
+            }
+          }
+          if (key.includes('version') || key.includes('firmware') || key.includes('fw')) {
+            version = val;
+          }
+        }
+      }
+
+      // If still unknown, try dump_state/dump_caps as a fallback
+      if (model === 'Unknown') {
+        try {
+          const dump = await this.sendCommand('w'); // dump_state in many builds
+          if (typeof dump === 'string') {
+            const m = dump.match(/model\s*[:=]\s*(.+)/i);
+            if (m) model = m[1].trim();
+          }
+        } catch {}
+      }
+
+      this.currentRadioState.model = model;
+      this.emit('stateChanged', { model });
       return { model, version };
     } catch (error) {
       return { model: 'Unknown', version: 'Unknown' };

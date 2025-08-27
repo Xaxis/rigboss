@@ -8,17 +8,17 @@ interface AppStore {
   // Configuration state
   config: AppConfig;
   updateConfig: (updates: Partial<AppConfig>) => void;
-  
+
   // Radio state
   radioState: Partial<RadioState>;
   setRadioState: (state: Partial<RadioState>) => void;
-  
+
   // Connection state
   backendConnected: boolean;
   radioConnected: boolean;
   setBackendConnected: (connected: boolean) => void;
   setRadioConnected: (connected: boolean) => void;
-  
+
   // UI state
   activeModal: string | null;
   setActiveModal: (modal: string | null) => void;
@@ -26,15 +26,15 @@ interface AppStore {
   setSidebarOpen: (open: boolean) => void;
   activeView: string;
   setActiveView: (view: string) => void;
-  
+
   // Error handling
   error: string | null;
   setError: (error: string | null) => void;
-  
+
   // Loading states
   connecting: boolean;
   setConnecting: (connecting: boolean) => void;
-  
+
   // Real-time feedback
   lastUpdate: number;
   setLastUpdate: () => void;
@@ -78,6 +78,10 @@ interface AppStore {
   // Activity logs
   activityLogs: ActivityLog[];
   addActivityLog: (log: Omit<ActivityLog, 'id' | 'timestamp'>) => void;
+  // Spectrum modal state
+  activeSpectrumModal?: 'combined' | 'spectrum' | 'waterfall' | null;
+  setActiveSpectrumModal?: (mode: 'combined' | 'spectrum' | 'waterfall' | null) => void;
+
   clearActivityLogs: () => void;
 }
 
@@ -174,6 +178,11 @@ export const useAppStore = create<AppStore>()(
       isTransmitting: false,
       setIsTransmitting: (transmitting) => set({ isTransmitting: transmitting }),
       lastCommand: null,
+
+	      // Spectrum modal
+	      activeSpectrumModal: null,
+	      setActiveSpectrumModal: (mode) => set({ activeSpectrumModal: mode }),
+
       setLastCommand: (command) => set({ lastCommand: command, lastUpdate: Date.now() }),
 
       // Audio system state

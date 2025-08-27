@@ -11,12 +11,12 @@ import BandSelector from './BandSelector';
 import MemoryChannels from './MemoryChannels';
 import AudioSystem from './AudioSystem';
 import { AudioEngine } from '@/audio/AudioEngine';
-import SpectrumDisplay from './SpectrumDisplay';
 import ActivityLogs from './ActivityLogs';
-import MiniSpectrum from './MiniSpectrum';
 import AudioStatus from './ui/AudioStatus';
 import Button from './ui/Button';
+import CombinedSpectrumView from './spectrum/CombinedSpectrumView';
 import { ToastManager } from './ui/Toast';
+import SpectrumModal from './modals/SpectrumModal';
 
 const RadioInterface: React.FC = () => {
   const {
@@ -31,6 +31,8 @@ const RadioInterface: React.FC = () => {
     config,
     toasts,
     removeToast,
+    activeSpectrumModal,
+    setActiveSpectrumModal,
   } = useAppStore();
 
   // Radio control handlers
@@ -262,10 +264,17 @@ const RadioInterface: React.FC = () => {
               {/* Mini Spectrum (if enabled) */}
               {config.ui.showSpectrum && (
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                    Live Spectrum
-                  </h3>
-                  <MiniSpectrum height={100} />
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                      Live Spectrum (Preview)
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setActiveSpectrumModal && setActiveSpectrumModal('combined')}>Open Full Screen</Button>
+                    </div>
+                  </div>
+                  <div className="h-[220px]">
+                    <CombinedSpectrumView height={200} />
+                  </div>
                 </div>
               )}
 
@@ -343,7 +352,17 @@ const RadioInterface: React.FC = () => {
 
           {activeView === 'spectrum' && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-              <SpectrumDisplay />
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Spectrum & Waterfall</h3>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setActiveSpectrumModal && setActiveSpectrumModal('combined')}>Full Screen</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setActiveSpectrumModal && setActiveSpectrumModal('spectrum')}>Spectrum</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setActiveSpectrumModal && setActiveSpectrumModal('waterfall')}>Waterfall</Button>
+                </div>
+              </div>
+              <div className="h-[480px]">
+                <CombinedSpectrumView height={460} />
+              </div>
             </div>
           )}
 
@@ -352,6 +371,13 @@ const RadioInterface: React.FC = () => {
               <AudioSystem />
             </div>
           )}
+
+          {/* Spectrum Fullscreen Modal */}
+          <SpectrumModal
+            open={!!activeSpectrumModal}
+            mode={(activeSpectrumModal || 'combined') as any}
+            onClose={() => setActiveSpectrumModal && setActiveSpectrumModal(null)}
+          />
 
           {activeView === 'logs' && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
