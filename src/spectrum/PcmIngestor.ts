@@ -64,11 +64,6 @@ export function attachPcmIngestor(service: SpectrumService) {
     const detail = (e as CustomEvent).detail as { samples: Float32Array; sampleRate: number };
     const { samples, sampleRate } = detail;
 
-    sampleCount++;
-    if (sampleCount === 1) {
-      console.log('[Spectrum] First PCM samples received:', samples.length, 'samples at', sampleRate, 'Hz');
-    }
-
     // Write into ring buffer
     for (let i = 0; i < samples.length; i++) {
       ring[writeIdx++] = samples[i];
@@ -113,13 +108,7 @@ export function attachPcmIngestor(service: SpectrumService) {
     }
 
     service.emit({ centerHz: service.getState().centerHz, spanHz: service.getState().spanHz, sampleRate, bins: out });
-
-    if (frameCount % 60 === 0) { // Log every 60 frames (~1 second)
-      console.log('[Spectrum] Emitted frame', frameCount, 'with', out.length, 'bins, max dB:', Math.max(...out).toFixed(1));
-    }
   }
-
-  console.log('[Spectrum] Attaching PCM ingestor to existing audio pipeline');
   window.addEventListener('pcm-samples', onPcm as EventListener);
   return () => window.removeEventListener('pcm-samples', onPcm as EventListener);
 }

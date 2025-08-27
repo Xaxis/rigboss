@@ -52,9 +52,15 @@ const CombinedSpectrumView: React.FC<{ height?: number }> = ({ height = 300 }) =
     setIsReceivingData(true);
 
     const spec = specRef.current; const wf = wfRef.current; if (!spec || !wf) return;
-    const w = spec.clientWidth || 800; const h = spec.clientHeight || height;
-    spec.width = w; spec.height = Math.floor(height * 0.55);
-    wf.width = w; wf.height = Math.floor(height * 0.45);
+
+    // Get actual container dimensions
+    const specHeight = Math.floor(height * 0.6);
+    const wfHeight = Math.floor(height * 0.4);
+
+    // Set canvas dimensions to match container exactly
+    const w = spec.parentElement?.clientWidth || 800;
+    spec.width = w; spec.height = specHeight;
+    wf.width = w; wf.height = wfHeight;
 
     const ctx = spec.getContext('2d')!; const bins = frame.bins; const n = bins.length;
     ctx.clearRect(0,0,spec.width,spec.height);
@@ -111,12 +117,15 @@ const CombinedSpectrumView: React.FC<{ height?: number }> = ({ height = 300 }) =
       ctx.stroke();
     }
 
-    // Waterfall
+    // Waterfall - scroll down by copying existing data
     const wctx = wf.getContext('2d')!;
-    const img = wctx.getImageData(0,0,wf.width,wf.height);
-    wctx.putImageData(img,0,1); // scroll down
+    if (wf.height > 1) {
+      // Get existing image data and shift it down by 1 pixel
+      const imageData = wctx.getImageData(0, 0, wf.width, wf.height - 1);
+      wctx.putImageData(imageData, 0, 1);
+    }
 
-    // Color mapping
+    // Color mapping function
     const getColor = (t: number) => {
       if (colorMap === 'thermal') {
         const r = Math.floor(255 * Math.min(1, t * 2));
@@ -136,14 +145,21 @@ const CombinedSpectrumView: React.FC<{ height?: number }> = ({ height = 300 }) =
       }
     };
 
-    for (let x=0; x<wf.width; x++){
-      const i = Math.floor((x/wf.width)*n);
+    // Draw new waterfall line at the top
+    const lineData = wctx.createImageData(wf.width, 1);
+    for (let x = 0; x < wf.width; x++) {
+      const i = Math.floor((x / wf.width) * n);
       const db = bins[i];
-      const t = Math.max(0, Math.min(1, (db - (refLevel-80)) / 80));
+      const t = Math.max(0, Math.min(1, (db - (refLevel - 80)) / 80));
       const [r, g, b] = getColor(t);
-      wctx.fillStyle = `rgb(${r},${g},${b})`;
-      wctx.fillRect(x,0,1,1);
+
+      const pixelIndex = x * 4;
+      lineData.data[pixelIndex] = r;     // Red
+      lineData.data[pixelIndex + 1] = g; // Green
+      lineData.data[pixelIndex + 2] = b; // Blue
+      lineData.data[pixelIndex + 3] = 255; // Alpha
     }
+    wctx.putImageData(lineData, 0, 0);
   }
 
   // Mouse wheel: zoom span around cursor; Ctrl modifies ref level
@@ -267,7 +283,7 @@ const CombinedSpectrumView: React.FC<{ height?: number }> = ({ height = 300 }) =
       </div>
 
       {/* Spectrum Canvas */}
-      <div onWheel={onWheel}>
+      <div onWheel={onWheel} style={{ height: height - 80 }} className="flex flex-col">
         <canvas
           ref={specRef}
           onMouseDown={onMouseDown}
@@ -276,17 +292,19 @@ const CombinedSpectrumView: React.FC<{ height?: number }> = ({ height = 300 }) =
           onClick={onClick}
           style={{
             width: '100%',
-            height: Math.floor(height*0.55),
+            height: `${Math.floor((height - 80) * 0.6)}px`,
             cursor: dragging.current ? 'grabbing' : 'crosshair',
-            display: 'block'
+            display: 'block',
+            backgroundColor: '#0f172a'
           }}
         />
         <canvas
           ref={wfRef}
           style={{
             width: '100%',
-            height: Math.floor(height*0.45),
-            display: 'block'
+            height: `${Math.floor((height - 80) * 0.4)}px`,
+            display: 'block',
+            backgroundColor: '#000'
           }}
         />
       </div>
