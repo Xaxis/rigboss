@@ -114,6 +114,7 @@ const defaultConfig: AppConfig = {
     frequencyStep: 1000,
   },
   network: {
+    serverHost: '',
     serverPort: 3001,
     allowRemoteConnections: false,
   },

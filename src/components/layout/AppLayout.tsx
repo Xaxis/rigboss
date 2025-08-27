@@ -92,8 +92,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
     // Set up event listeners
     socketService.on('connected', setBackendConnected);
-    socketService.on('radio_state', setRadioState);
+    socketService.on('radio_state', (state) => {
+      console.log('[AppLayout] Received radio_state:', state);
+      setRadioState(state);
+    });
     socketService.on('connection_status', (status: { connected: boolean; radio?: string }) => {
+      console.log('[AppLayout] Received connection_status:', status);
       setRadioConnected(status.connected);
       if (status.radio) {
         setRadioState({ model: status.radio });
@@ -132,13 +136,26 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         },
         body: JSON.stringify({ host: 'localhost', port: 4532 }), // Backend connects to local rigctld
       });
-      
+
       const result = await response.json();
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Connection failed');
       }
-      
+
+      // Wait a moment for backend to emit connection_status, then check health as fallback
+      setTimeout(async () => {
+        try {
+          const healthRes = await fetch(`${backendConfig.apiUrl}/health`);
+          if (healthRes.ok) {
+            const health = await healthRes.json();
+            setRadioConnected(!!health?.rigctld?.connected);
+          }
+        } catch (e) {
+          console.warn('Failed to check health after connection:', e);
+        }
+      }, 500);
+
       // Update config with successful connection
       useAppStore.getState().updateConfig({
         radio: {
@@ -147,7 +164,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           rigctldPort: 4532,
         }
       });
-      
+
       setActiveModal(null);
       addToast({
         type: 'success',

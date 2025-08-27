@@ -3,6 +3,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { backendConfig } from '@/utils/backendConfig';
+import { useAppStore } from '@/stores/appStore';
 
 interface ConnectionModalProps {
   isOpen: boolean;
@@ -17,8 +18,16 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
   onConnect,
   connecting
 }) => {
+  const { config, updateConfig } = useAppStore();
   const [serverHost, setServerHost] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Load saved server address from config on mount
+  React.useEffect(() => {
+    if (config.network.serverHost) {
+      setServerHost(config.network.serverHost);
+    }
+  }, [config.network.serverHost]);
 
   const presets = [
     {
@@ -47,20 +56,29 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
       return;
     }
 
+    // Save server address to config (persisted automatically by Zustand)
+    const trimmedHost = serverHost.trim();
+    updateConfig({
+      network: {
+        ...config.network,
+        serverHost: trimmedHost,
+      }
+    });
+
     // Configure backend to connect to the radio server
-    const serverUrl = `http://${serverHost.trim()}:3001`;
+    const serverUrl = `http://${trimmedHost}:3001`;
     try {
       backendConfig.setBackendUrl(serverUrl);
 
       // Test backend connection first
       const isReachable = await backendConfig.testConnection();
       if (!isReachable) {
-        setError(`Cannot reach radio server at ${serverHost}. Make sure rigboss backend is running.`);
+        setError(`Cannot reach radio server at ${trimmedHost}. Make sure rigboss backend is running.`);
         return;
       }
 
       // Connect to the radio server (backend will handle rigctld connection)
-      await onConnect(serverHost.trim());
+      await onConnect(trimmedHost);
       onClose();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Connection failed');
@@ -70,6 +88,16 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
   const handlePresetClick = (preset: typeof presets[0]) => {
     setServerHost(preset.host);
     setError(null);
+
+    // Save preset selection to config
+    if (preset.host) {
+      updateConfig({
+        network: {
+          ...config.network,
+          serverHost: preset.host,
+        }
+      });
+    }
   };
 
   const handleClose = () => {

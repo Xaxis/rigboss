@@ -1,6 +1,8 @@
 // Centralized backend URL configuration
 // Allows dynamic configuration via UI while using .env as default
 
+import { useAppStore } from '@/stores/appStore';
+
 class BackendConfig {
   private _baseUrl: string;
   private _listeners: Set<(url: string) => void> = new Set();
@@ -14,12 +16,28 @@ class BackendConfig {
   private initialize() {
     if (this._initialized || typeof window === 'undefined') return;
 
-    // Default URL logic (client-side only)
-    const currentHost = window.location.hostname;
-    if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
-      this._baseUrl = 'http://localhost:3001';
-    } else {
-      this._baseUrl = `http://${currentHost}:3001`;
+    // Check for saved server address in Zustand store first
+    try {
+      const savedHost = useAppStore.getState().config.network.serverHost;
+      if (savedHost) {
+        this._baseUrl = `http://${savedHost}:3001`;
+      } else {
+        // Default URL logic (client-side only)
+        const currentHost = window.location.hostname;
+        if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+          this._baseUrl = 'http://localhost:3001';
+        } else {
+          this._baseUrl = `http://${currentHost}:3001`;
+        }
+      }
+    } catch (e) {
+      // Fallback if store not available
+      const currentHost = window.location.hostname;
+      if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+        this._baseUrl = 'http://localhost:3001';
+      } else {
+        this._baseUrl = `http://${currentHost}:3001`;
+      }
     }
 
     // Override with environment variable if available
@@ -71,7 +89,23 @@ class BackendConfig {
     }
 
     this._baseUrl = url;
-    
+
+    // Save to Zustand store (extract hostname from URL)
+    if (typeof window !== 'undefined') {
+      try {
+        const urlObj = new URL(url);
+        const store = useAppStore.getState();
+        store.updateConfig({
+          network: {
+            ...store.config.network,
+            serverHost: urlObj.hostname,
+          }
+        });
+      } catch (e) {
+        console.warn('Failed to save server host to store:', e);
+      }
+    }
+
     // Notify listeners of URL change
     this._listeners.forEach(listener => listener(url));
   }

@@ -160,6 +160,7 @@ export interface AppConfig {
     frequencyStep: number;
   };
   network: {
+    serverHost: string;
     serverPort: number;
     allowRemoteConnections: boolean;
   };
