@@ -45,7 +45,6 @@ spectrumService.connectToAudioService(audioService);
 const httpTransport = new HttpTransport(serviceRegistry, server);
 
 // Bind Express app to the HTTP server so REST endpoints are served
-server.removeAllListeners('request');
 server.on('request', httpTransport.getApp());
 
 // Initialize Socket.IO transport (handles all socket connections and events)
