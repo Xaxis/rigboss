@@ -240,15 +240,16 @@ export const useAppStore = create<AppStore>()(
           state.initGlobalAudioEngine();
         }
 
-        if (!state.selectedMicrophone || state.selectedMicrophone === '') {
-          state.addToast({ type: 'error', title: 'No Microphone', message: 'Please select a microphone first' });
-          return;
-        }
-
         try {
           if (state.audioEngine) {
             await state.audioEngine.start();
-            await state.audioEngine.startMicCapture(state.selectedMicrophone);
+
+            // Start mic capture only if a mic is selected; otherwise RX-only
+            if (state.selectedMicrophone && state.selectedMicrophone !== '') {
+              await state.audioEngine.startMicCapture(state.selectedMicrophone);
+            } else {
+              state.addToast({ type: 'info', title: 'RX Only', message: 'Microphone not selected. You can hear radio audio; TX is disabled until a mic is chosen.', duration: 3000 });
+            }
           }
         } catch (error) {
           state.addToast({ type: 'error', title: 'Audio Failed', message: 'Failed to start audio streaming' });

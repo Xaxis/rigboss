@@ -106,13 +106,10 @@ const AudioSystem: React.FC = () => {
           </div>
           <button
             onClick={isAudioActive ? stopAudio : startAudio}
-            disabled={!selectedMicrophone || selectedMicrophone === ''}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
               isAudioActive
                 ? 'bg-red-600 hover:bg-red-700 text-white'
-                : (selectedMicrophone && selectedMicrophone !== '')
-                  ? 'bg-green-600 hover:bg-green-700 text-white'
-                  : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
           >
             {isAudioActive ? '🔇 Stop Audio' : '🎧 Start Audio'}
