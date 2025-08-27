@@ -135,11 +135,11 @@ const AudioSystem: React.FC = () => {
           </div>
           <button
             onClick={isAudioActive ? stopAudio : startAudio}
-            disabled={!selectedMicrophone}
+            disabled={!selectedMicrophone || selectedMicrophone === ''}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-              isAudioActive 
-                ? 'bg-red-600 hover:bg-red-700 text-white' 
-                : selectedMicrophone
+              isAudioActive
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : (selectedMicrophone && selectedMicrophone !== '')
                   ? 'bg-green-600 hover:bg-green-700 text-white'
                   : 'bg-gray-400 text-gray-200 cursor-not-allowed'
             }`}
@@ -264,7 +264,7 @@ const AudioSystem: React.FC = () => {
             </div>
           </div>
 
-          {!selectedMicrophone && (
+          {(!selectedMicrophone || selectedMicrophone === '') && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
                 ⚠️ Please select a microphone to enable audio streaming

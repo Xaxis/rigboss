@@ -59,8 +59,8 @@ interface AppStore {
   speakerLevel: number;
   rxAudioLevel: number;
   audioDevices: MediaDeviceInfo[];
-  selectedMicrophone: string | null;
-  selectedSpeaker: string | null;
+  selectedMicrophone: string;
+  selectedSpeaker: string;
   setAudioEngine: (engine: AudioEngine | null) => void;
   setAudioContext: (context: AudioContext | null) => void;
   setAudioStream: (stream: MediaStream | null) => void;
@@ -69,8 +69,8 @@ interface AppStore {
   setSpeakerLevel: (level: number) => void;
   setRxAudioLevel: (level: number) => void;
   setAudioDevices: (devices: MediaDeviceInfo[]) => void;
-  setSelectedMicrophone: (deviceId: string | null) => void;
-  setSelectedSpeaker: (deviceId: string | null) => void;
+  setSelectedMicrophone: (deviceId: string) => void;
+  setSelectedSpeaker: (deviceId: string) => void;
   initGlobalAudioEngine: () => void;
   startGlobalAudio: () => Promise<void>;
   stopGlobalAudio: () => void;
@@ -185,8 +185,8 @@ export const useAppStore = create<AppStore>()(
       speakerLevel: 0,
       rxAudioLevel: 0,
       audioDevices: [],
-      selectedMicrophone: null,
-      selectedSpeaker: null,
+      selectedMicrophone: '',
+      selectedSpeaker: '',
       setAudioEngine: (engine) => set({ audioEngine: engine }),
       setAudioContext: (context) => set({ audioContext: context }),
       setAudioStream: (stream) => set({ audioStream: stream }),
@@ -240,7 +240,7 @@ export const useAppStore = create<AppStore>()(
           state.initGlobalAudioEngine();
         }
 
-        if (!state.selectedMicrophone) {
+        if (!state.selectedMicrophone || state.selectedMicrophone === '') {
           state.addToast({ type: 'error', title: 'No Microphone', message: 'Please select a microphone first' });
           return;
         }
