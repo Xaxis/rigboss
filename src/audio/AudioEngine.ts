@@ -65,7 +65,15 @@ export class AudioEngine {
 
     this.socket.on('disconnect', () => {
       console.log('[AudioEngine] Disconnected from audio server');
-      this.events.onError?.('Audio connection lost');
+      this.events.onError?.('Audio connection lost - attempting reconnect...');
+
+      // Auto-reconnect after 2 seconds
+      setTimeout(() => {
+        if (this.socket && !this.socket.connected) {
+          console.log('[AudioEngine] Attempting to reconnect...');
+          this.socket.connect();
+        }
+      }, 2000);
     });
 
     // Initialize audio context for playback
