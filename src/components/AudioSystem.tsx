@@ -45,22 +45,22 @@ const AudioSystem: React.FC = () => {
       }
 
       try {
-        // First try to get devices without permission (limited labels)
-        let devices = await navigator.mediaDevices.enumerateDevices();
-        console.log('Initial devices (no permission):', devices);
+        // Request permission first to get device labels
+        let stream: MediaStream | null = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log('Got microphone permission');
+        } catch (permError) {
+          console.warn('Microphone permission denied, device labels may be limited');
+        }
 
-        // If we got devices but no labels, request permission
-        if (devices.length > 0 && devices[0].label === '') {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(track => track.stop());
+        // Get all devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('Found devices:', devices);
 
-            // Get devices again with labels
-            devices = await navigator.mediaDevices.enumerateDevices();
-            console.log('Devices with permission:', devices);
-          } catch (permError) {
-            console.warn('Permission denied, using devices without labels');
-          }
+        // Stop the permission stream
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
         }
 
         setAudioDevices(devices);
@@ -72,20 +72,28 @@ const AudioSystem: React.FC = () => {
         console.log('Microphones found:', mics.length);
         console.log('Speakers found:', speakers.length);
 
-        if (mics.length > 0 && !selectedMicrophone) {
+        if (mics.length > 0 && (!selectedMicrophone || selectedMicrophone === '')) {
           setSelectedMicrophone(mics[0].deviceId);
           console.log('Auto-selected microphone:', mics[0]);
         }
-        if (speakers.length > 0 && !selectedSpeaker) {
+        if (speakers.length > 0 && (!selectedSpeaker || selectedSpeaker === '')) {
           setSelectedSpeaker(speakers[0].deviceId);
           console.log('Auto-selected speaker:', speakers[0]);
         }
 
-        if (mics.length === 0 || speakers.length === 0) {
+        if (mics.length === 0) {
+          addToast({
+            type: 'error',
+            title: 'No Microphones Found',
+            message: 'No microphones detected. Check device connections and browser permissions.'
+          });
+        }
+
+        if (speakers.length === 0) {
           addToast({
             type: 'warning',
-            title: 'Limited Audio Devices',
-            message: 'Some audio devices may not be available. Check browser permissions.'
+            title: 'No Speakers Found',
+            message: 'No speakers detected. Audio will use default output.'
           });
         }
       } catch (error) {

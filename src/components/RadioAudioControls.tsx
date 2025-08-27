@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '@/stores/appStore';
+import { RadioControl, RadioToggle } from './ui/RadioFeedback';
 
 interface AudioControlProps {
   label: string;
@@ -108,6 +109,9 @@ const RadioAudioControls: React.FC = () => {
     noiseReduction: false,
   });
 
+  // Track which values are live from radio vs cached
+  const [liveStatus, setLiveStatus] = useState<Record<string, { isLive: boolean; lastUpdated: Date }>>({});
+
   const [isLoading, setIsLoading] = useState(false);
 
   // AGC Mode options
@@ -140,11 +144,17 @@ const RadioAudioControls: React.FC = () => {
         throw new Error('Failed to set audio level');
       }
 
-      addToast({ 
-        type: 'success', 
-        title: 'Audio Updated', 
+      // Mark as live from radio
+      setLiveStatus(prev => ({
+        ...prev,
+        [level]: { isLive: true, lastUpdated: new Date() }
+      }));
+
+      addToast({
+        type: 'success',
+        title: 'Audio Updated',
         message: `${level.toUpperCase()} set to ${value}%`,
-        duration: 2000 
+        duration: 2000
       });
     } catch (error) {
       addToast({ type: 'error', title: 'Audio Error', message: 'Failed to update audio level' });
@@ -191,7 +201,7 @@ const RadioAudioControls: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
         <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Essential Audio</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <AudioControl
+          <RadioControl
             label="Volume (AF)"
             value={audioLevels.volume}
             onChange={(value) => {
@@ -199,8 +209,10 @@ const RadioAudioControls: React.FC = () => {
               handleLevelChange('AF', value);
             }}
             disabled={!radioConnected || isLoading}
+            isLive={liveStatus.AF?.isLive || false}
+            lastUpdated={liveStatus.AF?.lastUpdated}
           />
-          <AudioControl
+          <RadioControl
             label="RF Gain"
             value={audioLevels.rfGain}
             onChange={(value) => {
@@ -208,8 +220,10 @@ const RadioAudioControls: React.FC = () => {
               handleLevelChange('RF', value);
             }}
             disabled={!radioConnected || isLoading}
+            isLive={liveStatus.RF?.isLive || false}
+            lastUpdated={liveStatus.RF?.lastUpdated}
           />
-          <AudioControl
+          <RadioControl
             label="Microphone Gain"
             value={audioLevels.micGain}
             onChange={(value) => {
@@ -217,8 +231,10 @@ const RadioAudioControls: React.FC = () => {
               handleLevelChange('MICGAIN', value);
             }}
             disabled={!radioConnected || isLoading}
+            isLive={liveStatus.MICGAIN?.isLive || false}
+            lastUpdated={liveStatus.MICGAIN?.lastUpdated}
           />
-          <AudioControl
+          <RadioControl
             label="Squelch"
             value={audioLevels.squelch}
             onChange={(value) => {
@@ -226,6 +242,8 @@ const RadioAudioControls: React.FC = () => {
               handleLevelChange('SQL', value);
             }}
             disabled={!radioConnected || isLoading}
+            isLive={liveStatus.SQL?.isLive || false}
+            lastUpdated={liveStatus.SQL?.lastUpdated}
           />
         </div>
       </div>
