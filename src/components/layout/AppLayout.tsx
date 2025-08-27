@@ -105,18 +105,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     };
   }, [setBackendConnected, setRadioConnected, setRadioState, setError, setActiveModal, setConnecting, addToast]);
 
-  // Handle connection to rigctld
-  const handleConnect = async (host: string, port: number) => {
+  // Handle connection to radio server
+  const handleConnect = async (serverHost: string) => {
     setConnecting(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`${backendConfig.apiUrl}/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ host, port }),
+        body: JSON.stringify({ host: 'localhost', port: 4532 }), // Backend connects to local rigctld
       });
       
       const result = await response.json();
@@ -129,8 +129,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       useAppStore.getState().updateConfig({
         radio: {
           ...config.radio,
-          rigctldHost: host,
-          rigctldPort: port,
+          rigctldHost: 'localhost', // Backend handles rigctld connection
+          rigctldPort: 4532,
         }
       });
       
@@ -138,7 +138,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       addToast({
         type: 'success',
         title: 'Connected',
-        message: `Successfully connected to rigctld at ${host}:${port}`,
+        message: `Successfully connected to radio server at ${serverHost}`,
       });
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Connection failed');

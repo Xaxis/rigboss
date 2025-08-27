@@ -7,7 +7,7 @@ import { backendConfig } from '@/utils/backendConfig';
 interface ConnectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConnect: (host: string, port: number) => Promise<void>;
+  onConnect: (serverHost: string) => Promise<void>;
   connecting: boolean;
 }
 
@@ -17,30 +17,24 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
   onConnect,
   connecting
 }) => {
-  const [host, setHost] = useState('');
-  const [port, setPort] = useState('4532');
-  const [backendUrl, setBackendUrl] = useState('');
+  const [serverHost, setServerHost] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const presets = [
-    { 
-      name: 'Local Development', 
-      host: 'localhost', 
-      port: 4532,
-      description: 'rigctld running on this machine'
+    {
+      name: 'Local Development',
+      host: 'localhost',
+      description: 'Radio server running on this machine'
     },
-    { 
-      name: 'Raspberry Pi', 
-      host: 'raspberrypi.local', 
-      port: 4532,
-      description: 'Default Pi hostname'
+    {
+      name: 'Raspberry Pi',
+      host: '10.0.0.20',
+      description: 'Radio server on Raspberry Pi'
     },
-    { 
-      name: 'Custom Network', 
-      host: '192.168.1.100', 
-      port: 4532,
-      description: 'Enter your own IP address'
+    {
+      name: 'Custom Network',
+      host: '192.168.1.100',
+      description: 'Radio server on custom IP'
     },
   ];
 
@@ -48,24 +42,25 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    // Update backend URL if provided
-    if (backendUrl.trim()) {
-      try {
-        backendConfig.setBackendUrl(backendUrl.trim());
-        // Test the connection
-        const isReachable = await backendConfig.testConnection();
-        if (!isReachable) {
-          setError('Cannot reach backend server at the specified URL');
-          return;
-        }
-      } catch (err) {
-        setError('Invalid backend URL');
-        return;
-      }
+    if (!serverHost.trim()) {
+      setError('Please enter a server address');
+      return;
     }
 
+    // Configure backend to connect to the radio server
+    const serverUrl = `http://${serverHost.trim()}:3001`;
     try {
-      await onConnect(host, parseInt(port));
+      backendConfig.setBackendUrl(serverUrl);
+
+      // Test backend connection first
+      const isReachable = await backendConfig.testConnection();
+      if (!isReachable) {
+        setError(`Cannot reach radio server at ${serverHost}. Make sure rigboss backend is running.`);
+        return;
+      }
+
+      // Connect to the radio server (backend will handle rigctld connection)
+      await onConnect(serverHost.trim());
       onClose();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Connection failed');
@@ -73,8 +68,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
   };
 
   const handlePresetClick = (preset: typeof presets[0]) => {
-    setHost(preset.host);
-    setPort(preset.port.toString());
+    setServerHost(preset.host);
     setError(null);
   };
 
@@ -89,7 +83,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Connect to rigctld"
+      title="Connect to Radio Server"
       size="md"
       closeOnOverlayClick={!connecting}
       closeOnEscape={!connecting}
@@ -98,44 +92,11 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
       <div className="space-y-6">
         {/* Description */}
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          <p>Connect to rigctld running on your Raspberry Pi or other device to control your radio.</p>
-        </div>
-
-        {/* Backend Configuration */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-              Backend Server
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              {showAdvanced ? 'Hide Advanced' : 'Advanced Settings'}
-            </button>
+          <p>Connect to the radio server running rigboss backend and rigctld.</p>
+          <div className="mt-2 text-xs bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+            <strong>How it works:</strong> Enter the IP/hostname where rigboss backend is running.
+            The backend handles the rigctld connection automatically.
           </div>
-
-          {showAdvanced && (
-            <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Backend URL (optional)
-                </label>
-                <Input
-                  type="text"
-                  value={backendUrl}
-                  onChange={(e) => setBackendUrl(e.target.value)}
-                  placeholder="e.g., 10.0.0.20 or http://192.168.1.100:3001"
-                  disabled={connecting}
-                  className="text-sm"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Leave empty to auto-detect. Use this when running frontend and backend on different machines.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Quick Presets */}
@@ -161,7 +122,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
                     </div>
                   </div>
                   <div className="text-sm font-mono text-gray-600 dark:text-gray-300">
-                    {preset.host}:{preset.port}
+                    {preset.host}
                   </div>
                 </div>
               </button>
@@ -177,33 +138,16 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Hostname or IP Address"
+              label="Radio Server Address"
               type="text"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              placeholder="e.g., raspberrypi.local or 192.168.1.100"
+              value={serverHost}
+              onChange={(e) => setServerHost(e.target.value)}
+              placeholder="e.g., 10.0.0.20 or raspberrypi.local"
               disabled={connecting}
               required
               icon={
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-              }
-            />
-
-            <Input
-              label="Port"
-              type="number"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-              placeholder="4532"
-              min="1"
-              max="65535"
-              disabled={connecting}
-              required
-              icon={
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                 </svg>
               }
             />
@@ -232,7 +176,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
               <Button
                 type="submit"
                 loading={connecting}
-                disabled={!host || !port}
+                disabled={!serverHost}
                 className="flex-1"
               >
                 {connecting ? 'Connecting...' : 'Connect'}
@@ -246,10 +190,10 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
           <div className="text-sm text-blue-700 dark:text-blue-300">
             <div className="font-medium mb-2">Need help?</div>
             <ul className="space-y-1 text-xs">
-              <li>• Make sure rigctld is running: <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">rigctld -m 229 -r /dev/ttyUSB0</code></li>
-              <li>• Check firewall settings on the target device</li>
+              <li>• Make sure rigboss backend is running: <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">npm run dev:backend</code></li>
+              <li>• Backend should be running on port 3001</li>
+              <li>• Backend handles rigctld connection automatically</li>
               <li>• Use IP address if hostname doesn't resolve</li>
-              <li>• Default rigctld port is 4532</li>
             </ul>
           </div>
         </div>
