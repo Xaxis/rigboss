@@ -47,14 +47,48 @@ const httpTransport = new HttpTransport(serviceRegistry, server);
 // Create socket transport (handles all socket connections and events)
 const socketTransport = new SocketTransport(io, serviceRegistry);
 
+// CRITICAL: Set up radio service event forwarding for legacy frontend compatibility
+function setupRadioEventForwarding() {
+  radioService.on('event', (event: any) => {
+    // Forward radio events to main namespace for legacy compatibility
+    io.emit(event.type, event.data);
+
+    // Special handling for state changes to maintain compatibility
+    if (event.type === 'state_changed') {
+      io.emit('radio_state', event.data);
+      io.emit('connection_status', {
+        connected: true,
+        radio: event.data.model || 'Connected'
+      });
+    }
+
+    if (event.type === 'connected') {
+      io.emit('connection_status', {
+        connected: true,
+        radio: 'Connected'
+      });
+    }
+
+    if (event.type === 'disconnected') {
+      io.emit('connection_status', {
+        connected: false,
+        radio: 'Disconnected'
+      });
+    }
+  });
+}
+
 // Startup sequence
 async function startServer() {
   try {
     console.log('Starting rigboss backend server...');
-    
+
     // Start all services
     console.log('Starting services...');
     await serviceRegistry.startAll();
+
+    // Set up radio event forwarding after services are started
+    setupRadioEventForwarding();
     
     // Start HTTP server
     await httpTransport.listen(config.network.serverPort);

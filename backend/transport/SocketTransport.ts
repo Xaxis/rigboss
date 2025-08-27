@@ -137,12 +137,14 @@ export class SocketTransport {
     // Forward service status changes
     this.serviceRegistry.on('serviceStatusChanged', (statusChange) => {
       this.io.emit('service_status_changed', statusChange);
-      
+
       // Update legacy connection status if radio service changed
       if (statusChange.serviceName === 'radio') {
         this.broadcastLegacyConnectionStatus();
       }
     });
+
+    // Radio event forwarding is handled in server.ts after service registration
   }
 
   private forwardServiceEvent(serviceName: string, event: SocketEvent): void {
