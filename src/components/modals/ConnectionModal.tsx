@@ -58,6 +58,7 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
 
     // Save server address to config (persisted automatically by Zustand)
     const trimmedHost = serverHost.trim();
+    console.log('[ConnectionModal] Updating config with serverHost:', trimmedHost);
     updateConfig({
       network: {
         ...config.network,
@@ -67,20 +68,30 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
 
     // Configure backend to connect to the radio server
     const serverUrl = `http://${trimmedHost}:3001`;
+    console.log('[ConnectionModal] Setting backend URL to:', serverUrl);
     try {
       backendConfig.setBackendUrl(serverUrl);
+      console.log('[ConnectionModal] Backend URL set, current URLs:', {
+        baseUrl: backendConfig.baseUrl,
+        apiUrl: backendConfig.apiUrl
+      });
 
       // Test backend connection first
+      console.log('[ConnectionModal] Testing backend connection...');
       const isReachable = await backendConfig.testConnection();
+      console.log('[ConnectionModal] Backend reachable:', isReachable);
       if (!isReachable) {
         setError(`Cannot reach radio server at ${trimmedHost}. Make sure rigboss backend is running.`);
         return;
       }
 
       // Connect to the radio server (backend will handle rigctld connection)
+      console.log('[ConnectionModal] Calling onConnect with:', trimmedHost);
       await onConnect(trimmedHost);
+      console.log('[ConnectionModal] onConnect successful, closing modal');
       onClose();
     } catch (error) {
+      console.error('[ConnectionModal] Connection failed:', error);
       setError(error instanceof Error ? error.message : 'Connection failed');
     }
   };

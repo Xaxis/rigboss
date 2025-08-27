@@ -119,24 +119,38 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   // Handle connection to radio server
   const handleConnect = async (serverHost: string) => {
+    console.log('[AppLayout] handleConnect called with serverHost:', serverHost);
     setConnecting(true);
     setError(null);
 
     try {
+      console.log('[AppLayout] Current backend URLs:', {
+        baseUrl: backendConfig.baseUrl,
+        apiUrl: backendConfig.apiUrl,
+        socketUrl: backendConfig.socketUrl
+      });
+
       // Reconnect socket to new backend URL
+      console.log('[AppLayout] Disconnecting socket...');
       socketService.disconnect();
+      console.log('[AppLayout] Reconnecting socket...');
       await socketService.connect();
       setBackendConnected(true);
+      console.log('[AppLayout] Socket reconnected successfully');
 
-      const response = await fetch(`${backendConfig.apiUrl}/radio/connect`, {
+      const apiUrl = `${backendConfig.apiUrl}/radio/connect`;
+      console.log('[AppLayout] Making API call to:', apiUrl);
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ host: 'localhost', port: 4532 }), // Backend connects to local rigctld
       });
+      console.log('[AppLayout] API response status:', response.status);
 
       const result = await response.json();
+      console.log('[AppLayout] API response result:', result);
 
       if (!result.success) {
         throw new Error(result.error || 'Connection failed');
