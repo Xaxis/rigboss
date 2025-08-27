@@ -31,6 +31,9 @@ const AudioSystem: React.FC = () => {
   const [micMuted, setMicMuted] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [vuMeterMic, setVuMeterMic] = useState(0);
+  const [rxAudioLevel, setRxAudioLevel] = useState(0);
+  const [isReceivingAudio, setIsReceivingAudio] = useState(false);
+  const [isTransmitting, setIsTransmitting] = useState(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const engineRef = useRef<AudioEngine | null>(null);
 
@@ -45,6 +48,7 @@ const AudioSystem: React.FC = () => {
         }
       },
       onConnected: () => {
+        setIsReceivingAudio(true);
         addToast({ type: 'success', title: 'Audio connected', message: 'Receiving radio audio' });
       },
       onError: (msg) => addToast({ type: 'error', title: 'Audio error', message: msg })
@@ -56,6 +60,7 @@ const AudioSystem: React.FC = () => {
     // Listen for PTT events from RadioInterface
     const handlePTTChange = (event: CustomEvent) => {
       const { enabled } = event.detail;
+      setIsTransmitting(enabled);
       engine.setPTT(enabled).catch(console.error);
     };
 
@@ -418,6 +423,25 @@ const AudioSystem: React.FC = () => {
                 {Math.round(vuMeterSpeaker)}%
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Audio Status */}
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+        <h4 className="font-medium text-gray-900 dark:text-white mb-4">Audio Status</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full ${isReceivingAudio ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              RX Audio {isReceivingAudio ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full ${isTransmitting ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`} />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              TX Audio {isTransmitting ? 'Transmitting' : 'Standby'}
+            </span>
           </div>
         </div>
       </div>

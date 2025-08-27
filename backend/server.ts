@@ -199,8 +199,37 @@ app.get('/api/health', (req, res) => {
       host: config.rigctld.host,
       port: config.rigctld.port
     },
+    audio: {
+      available: audioService?.available || false
+    },
     uptime: process.uptime()
   });
+});
+
+app.get('/api/audio/devices', async (req, res) => {
+  try {
+    const { execSync } = require('child_process');
+    const { platform } = require('os');
+
+    const result: any = { platform: platform() };
+
+    if (platform() === 'linux') {
+      try {
+        const inputDevices = execSync('arecord -l 2>/dev/null || echo "none"', { encoding: 'utf8' });
+        const outputDevices = execSync('aplay -l 2>/dev/null || echo "none"', { encoding: 'utf8' });
+        result.input = inputDevices;
+        result.output = outputDevices;
+      } catch (e) {
+        result.error = 'ALSA tools not available';
+      }
+    } else {
+      result.message = 'Device detection only available on Linux';
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to detect audio devices' });
+  }
 });
 
 app.post('/api/connect', async (req, res) => {

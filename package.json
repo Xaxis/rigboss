@@ -4,8 +4,10 @@
   "description": "Modern web-based ham radio rig control interface",
   "type": "module",
   "scripts": {
-    "install": "npm ci && npm run setup",
+    "postinstall": "npm run setup",
     "setup": "node scripts/setup.js",
+    "test-audio": "node scripts/test-audio.js",
+    "check-audio": "node scripts/check-audio.js",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "astro dev",
     "dev:backend": "tsx watch backend/server.ts",

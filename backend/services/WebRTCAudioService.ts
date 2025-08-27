@@ -198,8 +198,11 @@ export class WebRTCAudioService {
     });
 
     ffmpeg.stderr.on('data', (data) => {
-      // Log ffmpeg errors but don't crash
-      console.warn('[Audio] ffmpeg stderr:', data.toString());
+      const message = data.toString();
+      // Only log actual errors, not version info
+      if (message.includes('Error') || message.includes('error') || message.includes('failed')) {
+        console.warn('[Audio] ffmpeg error:', message.trim());
+      }
     });
 
     ffmpeg.on('close', (code) => {
@@ -208,7 +211,7 @@ export class WebRTCAudioService {
     });
 
     this.rxProcs.set(clientId, ffmpeg);
-    console.log('[Audio] Started RX capture for client', clientId);
+    console.log(`[Audio] Started RX capture for client ${clientId} using device: ${inputDevice}`);
   }
 
   private stopRxForClient(clientId: string): void {

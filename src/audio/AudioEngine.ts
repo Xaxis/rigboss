@@ -14,6 +14,8 @@ export class AudioEngine {
   private events: AudioEngineEvents;
   private micStream: MediaStream | null = null;
   private isTransmitting = false;
+  private audioQueue: Float32Array[] = [];
+  private isPlaying = false;
 
   constructor(events: AudioEngineEvents = {}) {
     this.events = events;
@@ -64,33 +66,87 @@ export class AudioEngine {
   }
 
   private async playAudioData(audioData: ArrayBuffer): Promise<void> {
-    if (!this.audioContext || !this.remoteAudioEl) return;
+    if (!this.audioContext) return;
 
     try {
-      // Convert raw PCM to AudioBuffer
-      const audioBuffer = await this.audioContext.decodeAudioData(audioData);
-
-      // Create a source and play it
-      const source = this.audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.audioContext.destination);
-      source.start();
-    } catch (e) {
-      // Raw PCM data - need to create AudioBuffer manually
+      // Raw PCM data from backend (s16le format)
       const samples = new Int16Array(audioData);
-      const audioBuffer = this.audioContext.createBuffer(1, samples.length, 48000);
-      const channelData = audioBuffer.getChannelData(0);
 
-      // Convert Int16 to Float32
+      if (samples.length === 0) return;
+
+      // Convert Int16 to Float32 and add to queue
+      const floatSamples = new Float32Array(samples.length);
       for (let i = 0; i < samples.length; i++) {
-        channelData[i] = samples[i] / 32768.0;
+        floatSamples[i] = samples[i] / 32768.0;
       }
 
-      const source = this.audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.audioContext.destination);
-      source.start();
+      this.audioQueue.push(floatSamples);
+
+      // Start continuous playback if not already playing
+      if (!this.isPlaying) {
+        this.startContinuousPlayback();
+      }
+
+    } catch (error) {
+      console.warn('Audio playback error:', error);
     }
+  }
+
+  private startContinuousPlayback(): void {
+    if (!this.audioContext || this.isPlaying) return;
+
+    this.isPlaying = true;
+    const bufferSize = 4096;
+    const processor = this.audioContext.createScriptProcessor(bufferSize, 0, 1);
+
+    processor.onaudioprocess = (e) => {
+      const outputData = e.outputBuffer.getChannelData(0);
+
+      // Fill output buffer from queue
+      let samplesWritten = 0;
+      while (samplesWritten < outputData.length && this.audioQueue.length > 0) {
+        const chunk = this.audioQueue[0];
+        const samplesToWrite = Math.min(chunk.length, outputData.length - samplesWritten);
+
+        for (let i = 0; i < samplesToWrite; i++) {
+          outputData[samplesWritten + i] = chunk[i];
+        }
+
+        samplesWritten += samplesToWrite;
+
+        if (samplesToWrite === chunk.length) {
+          this.audioQueue.shift(); // Remove fully consumed chunk
+        } else {
+          // Partial consumption - keep remaining samples
+          this.audioQueue[0] = chunk.slice(samplesToWrite);
+        }
+      }
+
+      // Fill remaining with silence if no more data
+      for (let i = samplesWritten; i < outputData.length; i++) {
+        outputData[i] = 0;
+      }
+    };
+
+    processor.connect(this.audioContext.destination);
+
+    // Stop playback when queue is empty for a while
+    const checkEmpty = () => {
+      if (this.audioQueue.length === 0) {
+        setTimeout(() => {
+          if (this.audioQueue.length === 0) {
+            processor.disconnect();
+            this.isPlaying = false;
+          } else {
+            checkEmpty();
+          }
+        }, 1000);
+      } else {
+        setTimeout(checkEmpty, 100);
+      }
+    };
+
+    setTimeout(checkEmpty, 1000);
   }
 
   async startMicCapture(deviceId?: string): Promise<void> {
@@ -115,17 +171,19 @@ export class AudioEngine {
     }
   }
 
+  private micProcessor: ScriptProcessorNode | null = null;
+
   private startMicTransmission(): void {
-    if (!this.micStream || !this.audioContext) return;
+    if (!this.micStream || !this.audioContext || this.micProcessor) return;
 
     const source = this.audioContext.createMediaStreamSource(this.micStream);
-    const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.micProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
 
-    processor.onaudioprocess = (e) => {
+    this.micProcessor.onaudioprocess = (e) => {
       if (!this.isTransmitting) return;
 
       const inputData = e.inputBuffer.getChannelData(0);
-      // Convert Float32 to Int16
+      // Convert Float32 to Int16 (s16le format)
       const samples = new Int16Array(inputData.length);
       for (let i = 0; i < inputData.length; i++) {
         samples[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
@@ -134,12 +192,15 @@ export class AudioEngine {
       this.socket?.emit('mic-data', samples.buffer);
     };
 
-    source.connect(processor);
-    processor.connect(this.audioContext.destination);
+    source.connect(this.micProcessor);
+    this.micProcessor.connect(this.audioContext.destination);
   }
 
   private stopMicTransmission(): void {
-    // Mic transmission stops automatically when isTransmitting = false
+    if (this.micProcessor) {
+      this.micProcessor.disconnect();
+      this.micProcessor = null;
+    }
   }
 
   async stop(): Promise<void> {
