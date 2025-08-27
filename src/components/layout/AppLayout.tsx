@@ -190,9 +190,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           onClose={() => setActiveModal(null)}
         />
 
-        {/* Toast Notifications */}
-        <ToastManager toasts={toasts} onRemove={removeToast} />
       </div>
+
+      {/* Toast Notifications - Rendered outside main layout for proper overlay */}
+      <ToastManager toasts={toasts} onRemove={removeToast} />
     </ThemeProvider>
   );
 };

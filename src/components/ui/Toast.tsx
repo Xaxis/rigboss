@@ -83,8 +83,9 @@ const Toast: React.FC<ToastProps> = ({
     >
       <div className={`
         ${style.bg} ${style.border}
-        border rounded-lg shadow-lg p-4
+        border rounded-lg shadow-2xl p-4
         backdrop-blur-sm
+        ring-1 ring-black/5 dark:ring-white/10
       `}>
         <div className="flex items-start">
           <div className="flex-shrink-0">
@@ -138,13 +139,13 @@ interface ToastManagerProps {
 
 export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) => {
   return (
-    <div className="fixed top-4 right-4 z-50 pointer-events-none">
+    <div className="fixed top-4 right-4 pointer-events-none" style={{ zIndex: 9999 }}>
       {toasts.map((toast, index) => (
         <div
           key={toast.id}
           style={{
             marginTop: index > 0 ? '0.5rem' : '0',
-            zIndex: 50 + index
+            zIndex: 9999 + index
           }}
           className="pointer-events-auto"
         >
