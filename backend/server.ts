@@ -44,97 +44,13 @@ spectrumService.connectToAudioService(audioService);
 // Create transport layers
 const httpTransport = new HttpTransport(serviceRegistry, server);
 
-// Create socket transport
+// Create socket transport (handles all socket connections and events)
 const socketTransport = new SocketTransport(io, serviceRegistry);
-
-// Setup Socket.IO namespaces and event handling (legacy compatibility)
-function setupLegacySocketHandlers() {
-  // Main namespace for service discovery
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-    
-    // Send service discovery info
-    socket.emit('services_available', {
-      services: serviceRegistry.getAllMetadata(),
-      endpoints: serviceRegistry.getServiceEndpoints(),
-    });
-
-    // Send current health status
-    socket.emit('health_status', serviceRegistry.checkHealth());
-
-    // Legacy compatibility - emit connection status for existing frontend
-    const radioMeta = serviceRegistry.getMetadata('radio');
-    if (radioMeta) {
-      socket.emit('connection_status', {
-        connected: radioMeta.health.details?.rigctldConnected || false,
-        radio: radioMeta.health.details?.lastState || 'Unknown'
-      });
-    }
-
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
-  });
-
-  // Radio namespace
-  const radioNamespace = io.of('/radio');
-  radioNamespace.on('connection', (socket) => {
-    console.log('Radio client connected:', socket.id);
-    
-    socket.on('disconnect', () => {
-      console.log('Radio client disconnected:', socket.id);
-    });
-  });
-
-  // Forward radio service events to all connected clients
-  radioService.on('event', (event) => {
-    // Emit to main namespace for legacy compatibility
-    io.emit(event.type, event.data);
-    
-    // Also emit to radio namespace
-    radioNamespace.emit(event.type, event.data);
-    
-    // Special handling for state changes to maintain compatibility
-    if (event.type === 'state_changed') {
-      io.emit('radio_state', event.data);
-      io.emit('connection_status', {
-        connected: true,
-        radio: event.data.model || 'Connected'
-      });
-    }
-    
-    if (event.type === 'connected') {
-      io.emit('connection_status', {
-        connected: true,
-        radio: 'Connected'
-      });
-    }
-    
-    if (event.type === 'disconnected') {
-      io.emit('connection_status', {
-        connected: false,
-        radio: 'Disconnected'
-      });
-    }
-  });
-
-  // Service registry events
-  serviceRegistry.on('serviceStatusChanged', (event) => {
-    io.emit('service_status_changed', event);
-  });
-
-  serviceRegistry.on('serviceEvent', (event) => {
-    io.emit('service_event', event);
-  });
-}
 
 // Startup sequence
 async function startServer() {
   try {
     console.log('Starting rigboss backend server...');
-    
-    // Setup legacy socket handlers for compatibility
-    setupLegacySocketHandlers();
     
     // Start all services
     console.log('Starting services...');
