@@ -1,88 +1,37 @@
 # rigboss
 
-A modern, web-based ham radio rig control interface designed for the Raspberry Pi and other platforms. rigboss provides an elegant, touch-friendly interface for controlling amateur radio transceivers through a clean web interface.
-
-## Features
-
-- 🎛️ **Modern Web Interface**: Clean, responsive design optimized for touch screens
-- 📻 **Universal Radio Support**: Works with any radio supported by Hamlib/rigctld
-- 🌊 **Real-time Spectrum Display**: Live spectrum analyzer and waterfall for supported radios
-- 🎵 **Audio Streaming**: Low-latency audio streaming using Web Audio API and WebRTC
-- 📱 **Progressive Web App**: Install as a native app on mobile devices
-- 🌙 **Dark/Light Themes**: Automatic theme switching based on system preferences
-- 🔧 **Comprehensive Controls**: Frequency, mode, power, filters, and memory management
-- 🎯 **Touch Optimized**: Designed for tablet and touch screen operation
-
-## Supported Radios
-
-rigboss works with any radio supported by Hamlib, including:
-
-- **Icom**: IC-7300, IC-7610, IC-705, IC-9700, IC-R8600, and many others
-- **Yaesu**: FT-991A, FT-891, FT-dx101, and more
-- **Kenwood**: TS-890S, TS-590SG, TS-480, and others
-- **Xiegu**: X6100, G90, and other models
-
-## Architecture
-
-```
-Radio ↔ rigctld ↔ Node.js Backend ↔ WebSocket ↔ Astro Frontend
-                     ↕
-                Audio Streaming (WebRTC)
-```
-
-### Technology Stack
-
-- **Frontend**: Astro + React + TypeScript + Tailwind CSS
-- **Backend**: Node.js + Express + Socket.IO
-- **Radio Interface**: Hamlib rigctld TCP socket communication
-- **Audio**: Web Audio API + WebRTC for real-time streaming
-- **Build**: Vite + TypeScript + ESLint + Prettier
+Modern web-based ham radio rig control with cross-platform audio streaming.
 
 ## Quick Start
 
-### Prerequisites
+```bash
+git clone https://github.com/your-username/rigboss.git
+cd rigboss
+npm install  # This does EVERYTHING - installs deps, ffmpeg, creates config
+```
 
-1. **Hamlib** installed on your system:
-   ```bash
-   # Ubuntu/Debian
-   sudo apt-get install libhamlib-utils
+Then:
+1. Connect your radio via USB (CAT + Audio)
+2. Start rigctld: `rigctld -m 229 -r /dev/ttyUSB0 -s 115200`
+3. Run rigboss: `npm run dev`
+4. Open http://localhost:3000
 
-   # macOS
-   brew install hamlib
+**That's it!** The app auto-connects to rigctld and enables audio streaming.
 
-   # Or build from source: https://github.com/Hamlib/Hamlib
-   ```
+## What You Get
 
-2. **Node.js 18+** installed
+- **Radio Control**: Frequency, mode, power, PTT via web interface
+- **Audio Streaming**: Hear radio RX in browser, transmit mic via PTT
+- **Cross-Platform**: Works on Linux, macOS, Windows (via ffmpeg)
+- **Zero Config**: Auto-detects audio devices, auto-connects to rigctld
+- **Responsive**: Works on desktop, tablet, mobile
 
-### Installation
+## Supported Radios
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/rigboss.git
-   cd rigboss
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start rigctld for your radio:
-   ```bash
-   # Example for Icom IC-7300 on USB
-   rigctld -m 229 -r /dev/ttyUSB0 -s 115200
-
-   # Example for network-enabled radio
-   rigctld -m 229 -r 192.168.1.100:50001
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-5. Open your browser to `http://localhost:3000`
+Any radio supported by Hamlib. Common examples:
+- **Icom IC-7300**: `rigctld -m 229 -r /dev/ttyUSB0 -s 115200`
+- **Yaesu FT-991A**: `rigctld -m 135 -r /dev/ttyUSB0 -s 38400`
+- **Icom IC-705** (network): `rigctld -m 229 -r 192.168.1.100:50001`
 
 ## Raspberry Pi (full-stack) setup
 

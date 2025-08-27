@@ -118,7 +118,7 @@ const StatusBar: React.FC = () => {
           )}
           
           <div className="text-gray-500 dark:text-gray-400">
-            {new Date().toLocaleTimeString()}
+            {mounted ? new Date().toLocaleTimeString() : '--:--:--'}
           </div>
         </div>
       </div>

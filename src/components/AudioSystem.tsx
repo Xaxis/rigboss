@@ -75,6 +75,12 @@ const AudioSystem: React.FC = () => {
   useEffect(() => {
     const initAudio = async () => {
       try {
+        // Check if we're in a browser environment with media devices
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+          console.warn('Media devices not available (SSR or unsupported browser)');
+          return;
+        }
+
         // Get audio devices
         const devices = await navigator.mediaDevices.enumerateDevices();
         const audioInputs = devices.filter(device => device.kind === 'audioinput');
@@ -101,7 +107,10 @@ const AudioSystem: React.FC = () => {
       }
     };
 
-    initAudio();
+    // Only run in browser
+    if (typeof window !== 'undefined') {
+      initAudio();
+    }
 
     return () => {
       if (audioStream) {
@@ -143,6 +152,16 @@ const AudioSystem: React.FC = () => {
   const startAudio = async () => {
     try {
       if (!audioContext) return;
+
+      // Check if media devices are available
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+        addToast({
+          type: 'error',
+          title: 'Audio Error',
+          message: 'Media devices not available in this environment',
+        });
+        return;
+      }
 
       const constraints = {
         audio: {
