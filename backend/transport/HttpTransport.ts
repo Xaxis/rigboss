@@ -15,21 +15,30 @@ export class HttpTransport {
   }
 
   private setupMiddleware(): void {
+    // Allow cross-origin calls (safe for all paths)
     this.app.use(cors());
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
 
-    // Request logging
+    // IMPORTANT: Do NOT run body parsers or wrappers on Socket.IO engine paths
+    const skipSocketIO = (req: express.Request) => req.url.startsWith('/socket.io');
+
+    // Body parsers only for non-socket.io requests
+    this.app.use((req, res, next) => (skipSocketIO(req) ? next() : express.json()(req, res, next)));
+    this.app.use((req, res, next) => (skipSocketIO(req) ? next() : express.urlencoded({ extended: true })(req, res, next)));
+
+    // Request logging (skip socket.io noise)
     this.app.use((req, res, next) => {
-      console.log(`${req.method} ${req.path}`);
+      if (!skipSocketIO(req)) {
+        console.log(`${req.method} ${req.path}`);
+      }
       next();
     });
 
-    // Response wrapper
+    // Response wrapper (skip socket.io requests)
     this.app.use((req, res, next) => {
+      if (skipSocketIO(req)) return next();
       const originalJson = res.json;
       res.json = function(data: any) {
-        if (!data.timestamp) {
+        if (!data?.timestamp) {
           const response: ApiResponse = {
             success: true,
             data,

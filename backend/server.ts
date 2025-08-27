@@ -17,35 +17,29 @@ console.log('Loaded configuration:', JSON.stringify(config, null, 2));
 // Create service registry
 const serviceRegistry = new ServiceRegistry();
 
-// Create HTTP server and Socket.IO first (needed for AudioService)
-const server = createServer();
+// Create Express app via HttpTransport first
+const httpTransport = new HttpTransport(serviceRegistry);
+const app = httpTransport.getApp();
+
+// Create HTTP server from express app, then attach Socket.IO
+const server = createServer(app);
 const io = new SocketIOServer(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: '*', methods: ['GET','POST'] }
 });
 
-// Create and register services
+// Create and register services (AudioService receives io)
 const configService = new ConfigService(config);
 const radioService = new RadioService(config.radio);
 const audioService = new AudioService(config.audio, io);
 const spectrumService = new SpectrumService(config.spectrum);
 
-// Register services
 serviceRegistry.register(configService);
 serviceRegistry.register(radioService);
 serviceRegistry.register(audioService);
 serviceRegistry.register(spectrumService);
 
-// Connect spectrum service to audio service for real-time processing
+// Cross-wire services
 spectrumService.connectToAudioService(audioService);
-
-// Create transport layers
-const httpTransport = new HttpTransport(serviceRegistry, server);
-
-// Bind Express app to the HTTP server so REST endpoints are served
-server.on('request', httpTransport.getApp());
 
 // Initialize Socket.IO transport (handles all socket connections and events)
 new SocketTransport(io, serviceRegistry);
@@ -93,9 +87,14 @@ async function startServer() {
     // Set up radio event forwarding after services are started
     setupRadioEventForwarding();
     
-    // Start HTTP server
-    await httpTransport.listen(config.network.serverPort);
-    
+    // Start HTTP server (use the same server instance that Socket.IO is attached to)
+    await new Promise<void>((resolve) => {
+      server.listen(config.network.serverPort, () => {
+        console.log(`HTTP transport listening on port ${config.network.serverPort}`);
+        resolve();
+      });
+    });
+
     console.log(`rigboss backend server running on port ${config.network.serverPort}`);
     console.log(`Will attempt to connect to rigctld at ${config.radio.rigctldHost}:${config.radio.rigctldPort}`);
     console.log('Backend is ready - frontend will work even without rigctld connection');
