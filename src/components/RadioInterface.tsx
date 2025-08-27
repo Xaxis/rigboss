@@ -14,6 +14,7 @@ import { AudioEngine } from '@/audio/AudioEngine';
 import SpectrumDisplay from './SpectrumDisplay';
 import ActivityLogs from './ActivityLogs';
 import MiniSpectrum from './MiniSpectrum';
+import AudioStatus from './ui/AudioStatus';
 import Button from './ui/Button';
 
 const RadioInterface: React.FC = () => {
@@ -210,40 +211,48 @@ const RadioInterface: React.FC = () => {
         <div className="p-6 space-y-6 overflow-y-auto">
           {activeView === 'radio' && (
             <>
-              {/* Frequency Display */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                <FrequencyDisplay
-                  frequency={radioState.frequency || 0}
-                  onChange={handleFrequencyChange}
-                />
-              </div>
-
-              {/* Controls Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Mode Control */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                  <ModeSelector
-                    mode={radioState.mode || 'USB'}
-                    bandwidth={radioState.bandwidth || 2400}
-                    onChange={handleModeChange}
+              {/* Primary Control Panel */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                {/* Frequency Display - Hero Section */}
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                  <FrequencyDisplay
+                    frequency={radioState.frequency || 0}
+                    onChange={handleFrequencyChange}
                   />
                 </div>
 
-                {/* Power Control */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                  <PowerControl
-                    power={radioState.power || 0}
-                    maxPower={100}
-                    onChange={handlePowerChange}
-                  />
-                </div>
+                {/* Essential Controls Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6">
+                  {/* Mode Control */}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <ModeSelector
+                      mode={radioState.mode || 'USB'}
+                      bandwidth={radioState.bandwidth || 2400}
+                      onChange={handleModeChange}
+                    />
+                  </div>
 
-                {/* PTT Button */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                  <PTTButton
-                    active={radioState.ptt || false}
-                    onChange={handlePTTChange}
-                  />
+                  {/* Power Control */}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <PowerControl
+                      power={radioState.power || 0}
+                      maxPower={100}
+                      onChange={handlePowerChange}
+                    />
+                  </div>
+
+                  {/* PTT Button */}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <PTTButton
+                      active={radioState.ptt || false}
+                      onChange={handlePTTChange}
+                    />
+                  </div>
+
+                  {/* Audio Status */}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <AudioStatus />
+                  </div>
                 </div>
               </div>
 

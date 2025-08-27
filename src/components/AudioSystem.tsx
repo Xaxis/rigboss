@@ -3,19 +3,27 @@ import { useAppStore } from '@/stores/appStore';
 import { AudioEngine } from '@/audio/AudioEngine';
 
 const AudioSystem: React.FC = () => {
-  const { config, updateConfig, addToast } = useAppStore();
-  
-  // Audio state
-  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedMicrophone, setSelectedMicrophone] = useState<string>('');
-  const [selectedSpeaker, setSelectedSpeaker] = useState<string>('');
-  const [isAudioActive, setIsAudioActive] = useState(false);
-  const [isTransmitting, setIsTransmitting] = useState(false);
-  const [rxLevel, setRxLevel] = useState(0);
-  const [micLevel, setMicLevel] = useState(0);
-  
+  const {
+    config,
+    updateConfig,
+    addToast,
+    audioEngine,
+    audioEnabled: isAudioActive,
+    isTransmitting,
+    rxAudioLevel: rxLevel,
+    microphoneLevel: micLevel,
+    audioDevices,
+    selectedMicrophone,
+    selectedSpeaker,
+    setAudioDevices,
+    setSelectedMicrophone,
+    setSelectedSpeaker,
+    initGlobalAudioEngine,
+    startGlobalAudio,
+    stopGlobalAudio
+  } = useAppStore();
+
   // Refs
-  const engineRef = useRef<AudioEngine | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
 
   // Initialize audio devices
@@ -23,26 +31,7 @@ const AudioSystem: React.FC = () => {
     const initAudio = async () => {
       if (typeof window === 'undefined') return;
 
-      // Check if we're on HTTPS or localhost (required for audio devices)
-      const isSecureContext = window.isSecureContext || window.location.hostname === 'localhost';
-
-      if (!isSecureContext) {
-        console.warn('Not in secure context - audio devices may be limited');
-        addToast({
-          type: 'warning',
-          title: 'Secure Connection Required',
-          message: 'For full audio device access, use HTTPS or localhost. Basic audio will still work.'
-        });
-
-        // Provide fallback default devices
-        setAudioDevices([
-          { deviceId: 'default', kind: 'audioinput', label: 'Default Microphone', groupId: '' } as MediaDeviceInfo,
-          { deviceId: 'default', kind: 'audiooutput', label: 'Default Speakers', groupId: '' } as MediaDeviceInfo
-        ]);
-        setSelectedMicrophone('default');
-        setSelectedSpeaker('default');
-        return;
-      }
+      // Try to get devices directly - browsers usually allow this even without HTTPS
 
       if (!window.navigator?.mediaDevices) {
         console.warn('Media devices API not available');
@@ -55,21 +44,32 @@ const AudioSystem: React.FC = () => {
       }
 
       try {
-        // Request permission first to get device labels
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        // Stop the stream immediately, we just needed permission
-        stream.getTracks().forEach(track => track.stop());
+        // First try to get devices without permission (limited labels)
+        let devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('Initial devices (no permission):', devices);
 
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        console.log('Found audio devices:', devices);
+        // If we got devices but no labels, request permission
+        if (devices.length > 0 && devices[0].label === '') {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+
+            // Get devices again with labels
+            devices = await navigator.mediaDevices.enumerateDevices();
+            console.log('Devices with permission:', devices);
+          } catch (permError) {
+            console.warn('Permission denied, using devices without labels');
+          }
+        }
+
         setAudioDevices(devices);
 
         // Auto-select first available devices
         const mics = devices.filter(d => d.kind === 'audioinput');
         const speakers = devices.filter(d => d.kind === 'audiooutput');
 
-        console.log('Microphones:', mics);
-        console.log('Speakers:', speakers);
+        console.log('Microphones found:', mics.length);
+        console.log('Speakers found:', speakers.length);
 
         if (mics.length > 0 && !selectedMicrophone) {
           setSelectedMicrophone(mics[0].deviceId);
@@ -79,21 +79,20 @@ const AudioSystem: React.FC = () => {
           setSelectedSpeaker(speakers[0].deviceId);
           console.log('Auto-selected speaker:', speakers[0]);
         }
+
+        if (mics.length === 0 || speakers.length === 0) {
+          addToast({
+            type: 'warning',
+            title: 'Limited Audio Devices',
+            message: 'Some audio devices may not be available. Check browser permissions.'
+          });
+        }
       } catch (error) {
         console.error('Failed to get audio devices:', error);
-
-        // Fallback to default devices if permission denied
-        setAudioDevices([
-          { deviceId: 'default', kind: 'audioinput', label: 'Default Microphone', groupId: '' } as MediaDeviceInfo,
-          { deviceId: 'default', kind: 'audiooutput', label: 'Default Speakers', groupId: '' } as MediaDeviceInfo
-        ]);
-        setSelectedMicrophone('default');
-        setSelectedSpeaker('default');
-
         addToast({
-          type: 'warning',
-          title: 'Using Default Audio',
-          message: 'Using default audio devices. Grant microphone permission for device selection.'
+          type: 'error',
+          title: 'Audio Device Error',
+          message: 'Cannot access audio devices. Check browser settings.'
         });
       }
     };
@@ -102,69 +101,19 @@ const AudioSystem: React.FC = () => {
     return () => clearTimeout(timer);
   }, [addToast]);
 
-  // Initialize audio engine
+  // Initialize global audio engine
   useEffect(() => {
-    const engine = new AudioEngine({
-      onAvailable: (available) => {
-        if (!available) {
-          addToast({ type: 'warning', title: 'Audio Unavailable', message: 'Server audio not available' });
-        }
-      },
-      onConnected: () => {
-        setIsAudioActive(true);
-        addToast({ type: 'success', title: 'Audio Connected', message: 'Radio audio streaming active' });
-      },
-      onError: (msg) => {
-        setIsAudioActive(false);
-        addToast({ type: 'error', title: 'Audio Error', message: msg });
-      },
-      onRxLevel: (level) => setRxLevel(level)
-    });
-    
-    engineRef.current = engine;
-    if (audioElRef.current) engine.attachOutputElement(audioElRef.current);
+    initGlobalAudioEngine();
 
-    // Listen for PTT events
-    const handlePTTChange = (event: CustomEvent) => {
-      const { enabled } = event.detail;
-      setIsTransmitting(enabled);
-      engine.setPTT(enabled).catch(console.error);
-    };
-
-    window.addEventListener('ptt-change', handlePTTChange as EventListener);
-
-    return () => { 
-      window.removeEventListener('ptt-change', handlePTTChange as EventListener);
-      engine.stop().catch(() => {}); 
-    };
-  }, [addToast]);
-
-  // Start audio streaming
-  const startAudio = async () => {
-    if (!selectedMicrophone) {
-      addToast({ type: 'error', title: 'No Microphone', message: 'Please select a microphone first' });
-      return;
+    // Attach audio element if available
+    if (audioElRef.current && audioEngine) {
+      audioEngine.attachOutputElement(audioElRef.current);
     }
+  }, [initGlobalAudioEngine, audioEngine]);
 
-    try {
-      if (engineRef.current) {
-        await engineRef.current.start();
-        await engineRef.current.startMicCapture(selectedMicrophone);
-      }
-    } catch (error) {
-      addToast({ type: 'error', title: 'Audio Failed', message: 'Failed to start audio streaming' });
-    }
-  };
-
-  // Stop audio streaming
-  const stopAudio = () => {
-    if (engineRef.current) {
-      engineRef.current.stop();
-    }
-    setIsAudioActive(false);
-    setRxLevel(0);
-    addToast({ type: 'info', title: 'Audio Stopped', message: 'Radio audio streaming stopped' });
-  };
+  // Use global audio functions
+  const startAudio = startGlobalAudio;
+  const stopAudio = stopGlobalAudio;
 
   const microphones = audioDevices.filter(d => d.kind === 'audioinput');
   const speakers = audioDevices.filter(d => d.kind === 'audiooutput');
@@ -198,58 +147,71 @@ const AudioSystem: React.FC = () => {
           </button>
         </div>
 
-        {/* Status Display */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      </div>
+
+      {/* Radio Audio Status */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Radio Audio Status</h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* RX Status */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
             <div className="flex items-center space-x-3 mb-3">
               <div className={`w-4 h-4 rounded-full ${isAudioActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-              <span className="font-medium text-gray-900 dark:text-white">Radio → Your Speakers</span>
+              <span className="font-medium text-gray-900 dark:text-white">RX: Radio → Your Speakers</span>
             </div>
             {isAudioActive ? (
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Level:</span>
-                  <div className="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                    <div 
-                      className="bg-green-500 h-2 rounded-full transition-all duration-100"
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Audio Level:</span>
+                  <div className="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                    <div
+                      className="bg-green-500 h-3 rounded-full transition-all duration-100"
                       style={{ width: `${Math.min(100, rxLevel)}%` }}
                     />
                   </div>
                   <span className="text-sm text-gray-600 dark:text-gray-400 w-10">{Math.round(rxLevel)}%</span>
                 </div>
-                <p className="text-xs text-green-700 dark:text-green-300">✓ You can hear the radio</p>
+                <p className="text-xs text-green-700 dark:text-green-300">✓ Receiving radio audio</p>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Click "Start Audio" to hear radio</p>
+              <p className="text-sm text-gray-500">Start audio to receive radio</p>
             )}
           </div>
 
           {/* TX Status */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
             <div className="flex items-center space-x-3 mb-3">
               <div className={`w-4 h-4 rounded-full ${isTransmitting ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`} />
-              <span className="font-medium text-gray-900 dark:text-white">Your Mic → Radio</span>
+              <span className="font-medium text-gray-900 dark:text-white">TX: Your Mic → Radio</span>
             </div>
             {isTransmitting ? (
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Level:</span>
-                  <div className="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                    <div 
-                      className="bg-red-500 h-2 rounded-full transition-all duration-100"
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Mic Level:</span>
+                  <div className="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                    <div
+                      className="bg-red-500 h-3 rounded-full transition-all duration-100"
                       style={{ width: `${Math.min(100, micLevel)}%` }}
                     />
                   </div>
                   <span className="text-sm text-gray-600 dark:text-gray-400 w-10">{Math.round(micLevel)}%</span>
                 </div>
-                <p className="text-xs text-red-700 dark:text-red-300">🔴 TRANSMITTING</p>
+                <p className="text-xs text-red-700 dark:text-red-300">🔴 TRANSMITTING TO RADIO</p>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Press PTT button to transmit</p>
+              <p className="text-sm text-gray-500">Press PTT to transmit</p>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Computer Audio Setup */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Computer Audio Setup</h4>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Configure your laptop/computer's microphone and speakers for radio operation
+        </p>
 
         {/* Device Setup */}
         <div className="space-y-4">
@@ -309,66 +271,51 @@ const AudioSystem: React.FC = () => {
             </div>
           )}
 
-          {/* Connection Info */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              <strong>💡 How it works:</strong> Your laptop's microphone and speakers connect to the Pi's radio via network audio streaming.
-              {!window.isSecureContext && window.location.hostname !== 'localhost' && (
-                <span className="block mt-1 text-xs">
-                  Note: For full device selection, access via HTTPS or localhost. Default devices will work fine.
-                </span>
-              )}
-            </p>
-          </div>
+          {audioDevices.length === 0 && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ No audio devices detected. Check browser permissions or try refreshing the page.
+              </p>
+            </div>
+          )}
+
+          {microphones.length === 0 && audioDevices.length > 0 && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                ❌ No microphones found. Audio transmission will not work.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Audio Controls */}
+      {/* Audio Quality & Connection Info */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Audio Controls</h4>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Volume
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={config.audio.volume}
-              onChange={(e) => updateConfig('audio', { ...config.audio, volume: parseInt(e.target.value) })}
-              className="w-full"
-            />
-            <span className="text-xs text-gray-500">{config.audio.volume}%</span>
+        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Audio Connection Info</h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <div className="font-medium text-gray-900 dark:text-white mb-1">Audio Format</div>
+            <div className="text-gray-600 dark:text-gray-400">48kHz, 16-bit PCM</div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Microphone Gain
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={config.audio.micGain}
-              onChange={(e) => updateConfig('audio', { ...config.audio, micGain: parseInt(e.target.value) })}
-              className="w-full"
-            />
-            <span className="text-xs text-gray-500">{config.audio.micGain}%</span>
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <div className="font-medium text-gray-900 dark:text-white mb-1">Connection</div>
+            <div className="text-gray-600 dark:text-gray-400">
+              {isAudioActive ? '🟢 WebSocket Active' : '🔴 Disconnected'}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={config.audio.enableAGC}
-                onChange={(e) => updateConfig('audio', { ...config.audio, enableAGC: e.target.checked })}
-                className="mr-2"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Auto Gain Control</span>
-            </label>
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <div className="font-medium text-gray-900 dark:text-white mb-1">Latency</div>
+            <div className="text-gray-600 dark:text-gray-400">~100-200ms</div>
           </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <strong>💡 Audio Path:</strong> Your computer ↔ Network ↔ Pi ↔ USB ↔ Radio
+          </p>
         </div>
       </div>
 

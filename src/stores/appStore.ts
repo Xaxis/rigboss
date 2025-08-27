@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { RadioState, AppConfig, ActivityLog } from '@/types/radio';
 import type { ToastProps } from '@/components/ui/Toast';
+import { AudioEngine } from '@/audio/AudioEngine';
 
 interface AppStore {
   // Configuration state
@@ -50,22 +51,29 @@ interface AppStore {
   setLastCommand: (command: string) => void;
 
   // Audio system state
+  audioEngine: AudioEngine | null;
   audioContext: AudioContext | null;
   audioStream: MediaStream | null;
   audioEnabled: boolean;
   microphoneLevel: number;
   speakerLevel: number;
+  rxAudioLevel: number;
   audioDevices: MediaDeviceInfo[];
   selectedMicrophone: string | null;
   selectedSpeaker: string | null;
+  setAudioEngine: (engine: AudioEngine | null) => void;
   setAudioContext: (context: AudioContext | null) => void;
   setAudioStream: (stream: MediaStream | null) => void;
   setAudioEnabled: (enabled: boolean) => void;
   setMicrophoneLevel: (level: number) => void;
   setSpeakerLevel: (level: number) => void;
+  setRxAudioLevel: (level: number) => void;
   setAudioDevices: (devices: MediaDeviceInfo[]) => void;
   setSelectedMicrophone: (deviceId: string | null) => void;
   setSelectedSpeaker: (deviceId: string | null) => void;
+  initGlobalAudioEngine: () => void;
+  startGlobalAudio: () => Promise<void>;
+  stopGlobalAudio: () => void;
 
   // Activity logs
   activityLogs: ActivityLog[];
@@ -169,22 +177,92 @@ export const useAppStore = create<AppStore>()(
       setLastCommand: (command) => set({ lastCommand: command, lastUpdate: Date.now() }),
 
       // Audio system state
+      audioEngine: null,
       audioContext: null,
       audioStream: null,
       audioEnabled: false,
       microphoneLevel: 0,
       speakerLevel: 0,
+      rxAudioLevel: 0,
       audioDevices: [],
       selectedMicrophone: null,
       selectedSpeaker: null,
+      setAudioEngine: (engine) => set({ audioEngine: engine }),
       setAudioContext: (context) => set({ audioContext: context }),
       setAudioStream: (stream) => set({ audioStream: stream }),
       setAudioEnabled: (enabled) => set({ audioEnabled: enabled }),
       setMicrophoneLevel: (level) => set({ microphoneLevel: level }),
       setSpeakerLevel: (level) => set({ speakerLevel: level }),
+      setRxAudioLevel: (level) => set({ rxAudioLevel: level }),
       setAudioDevices: (devices) => set({ audioDevices: devices }),
       setSelectedMicrophone: (deviceId) => set({ selectedMicrophone: deviceId }),
       setSelectedSpeaker: (deviceId) => set({ selectedSpeaker: deviceId }),
+
+      // Global audio engine management
+      initGlobalAudioEngine: () => {
+        const state = get();
+        if (state.audioEngine) return; // Already initialized
+
+        const engine = new AudioEngine({
+          onAvailable: (available) => {
+            if (!available) {
+              state.addToast({ type: 'warning', title: 'Audio Unavailable', message: 'Server audio not available' });
+            }
+          },
+          onConnected: () => {
+            set({ audioEnabled: true });
+            state.addToast({ type: 'success', title: 'Audio Connected', message: 'Radio audio streaming active' });
+          },
+          onError: (msg) => {
+            set({ audioEnabled: false });
+            state.addToast({ type: 'error', title: 'Audio Error', message: msg });
+          },
+          onRxLevel: (level) => set({ rxAudioLevel: level })
+        });
+
+        set({ audioEngine: engine });
+
+        // Listen for PTT events
+        const handlePTTChange = (event: CustomEvent) => {
+          const { enabled } = event.detail;
+          set({ isTransmitting: enabled });
+          engine.setPTT(enabled).catch(console.error);
+        };
+
+        if (typeof window !== 'undefined') {
+          window.addEventListener('ptt-change', handlePTTChange as EventListener);
+        }
+      },
+
+      startGlobalAudio: async () => {
+        const state = get();
+        if (!state.audioEngine) {
+          state.initGlobalAudioEngine();
+        }
+
+        if (!state.selectedMicrophone) {
+          state.addToast({ type: 'error', title: 'No Microphone', message: 'Please select a microphone first' });
+          return;
+        }
+
+        try {
+          if (state.audioEngine) {
+            await state.audioEngine.start();
+            await state.audioEngine.startMicCapture(state.selectedMicrophone);
+          }
+        } catch (error) {
+          state.addToast({ type: 'error', title: 'Audio Failed', message: 'Failed to start audio streaming' });
+        }
+      },
+
+      stopGlobalAudio: () => {
+        const state = get();
+        if (state.audioEngine) {
+          state.audioEngine.stop();
+        }
+        set({ audioEnabled: false, rxAudioLevel: 0 });
+        state.addToast({ type: 'info', title: 'Audio Stopped', message: 'Radio audio streaming stopped' });
+      },
 
       // Activity logs
       activityLogs: [],
