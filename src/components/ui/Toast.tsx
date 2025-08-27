@@ -142,24 +142,47 @@ export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) 
 
   useEffect(() => {
     setMounted(true);
+
+    // Create toast container if it doesn't exist
+    let toastRoot = document.getElementById('toast-root');
+    if (!toastRoot) {
+      toastRoot = document.createElement('div');
+      toastRoot.id = 'toast-root';
+      toastRoot.style.cssText = `
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 999999;
+        pointer-events: none;
+        max-width: 400px;
+      `;
+      document.body.appendChild(toastRoot);
+    }
+
+    // Cleanup function
+    return () => {
+      const toastRoot = document.getElementById('toast-root');
+      if (toastRoot && toastRoot.children.length === 0) {
+        toastRoot.remove();
+      }
+    };
   }, []);
 
   if (!mounted) return null;
 
+  const toastRoot = document.getElementById('toast-root');
+  if (!toastRoot) return null;
+
   const toastContainer = (
-    <div
-      className="fixed top-4 right-4 pointer-events-none"
-      style={{ zIndex: 9999 }}
-    >
+    <div className="space-y-2">
       {toasts.map((toast, index) => (
         <div
           key={toast.id}
           style={{
-            marginTop: index > 0 ? '0.5rem' : '0',
-            zIndex: 9999 + index,
+            zIndex: 99999 + index,
             transform: `translateY(${index * 2}px)` // Slight stagger effect
           }}
-          className="pointer-events-auto"
+          className="pointer-events-auto toast-item"
         >
           <Toast {...toast} onClose={onRemove} />
         </div>
@@ -167,7 +190,7 @@ export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) 
     </div>
   );
 
-  return createPortal(toastContainer, document.body);
+  return createPortal(toastContainer, toastRoot);
 };
 
 export default Toast;

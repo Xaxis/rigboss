@@ -44,6 +44,28 @@ const { title, description = "Modern web-based ham radio rig control interface" 
         }
       })();
     </script>
+
+    <style>
+      /* Toast container styles - ensure they're always on top */
+      #toast-root {
+        position: fixed !important;
+        top: 1rem !important;
+        right: 1rem !important;
+        z-index: 999999 !important;
+        pointer-events: none !important;
+        max-width: 400px !important;
+      }
+
+      #toast-root > * {
+        pointer-events: auto !important;
+      }
+
+      /* Ensure toasts are above everything */
+      #toast-root .toast-item {
+        position: relative !important;
+        z-index: 999999 !important;
+      }
+    </style>
   </head>
   <body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 antialiased">
     <div id="app" class="min-h-screen flex flex-col">
