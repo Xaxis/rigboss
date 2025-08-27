@@ -39,11 +39,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   useEffect(() => {
     const initializeConnection = async () => {
       try {
-        // 1) Connect Socket.IO (same-origin)
+        // 1) Test if backend is reachable at default URL
+        const isReachable = await backendConfig.testConnection();
+        if (!isReachable) {
+          // Backend not reachable, show connection modal
+          setActiveModal('connection');
+          return;
+        }
+
+        // 2) Connect Socket.IO to backend
         await socketService.connect();
         setBackendConnected(true);
 
-        // 2) Ask backend for current health; set radio state accordingly
+        // 3) Ask backend for current health; set radio state accordingly
         const healthRes = await fetch(`${backendConfig.apiUrl}/health`);
         if (healthRes.ok) {
           const health = await healthRes.json();
@@ -51,7 +59,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           if (health?.rigctld?.connected) return; // already connected, no modal
         }
 
-        // 3) Auto-connect to local rigctld on the Pi
+        // 4) Auto-connect to local rigctld on the backend
         try {
           setConnecting(true);
           const res = await fetch(`${backendConfig.apiUrl}/connect`, {
@@ -70,12 +78,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           setConnecting(false);
         }
 
-        // 4) If still not connected, show modal for user input
+        // 5) If still not connected, show modal for user input
         setActiveModal('connection');
       } catch (error) {
         console.error('Failed to connect to backend:', error);
         setError('Failed to connect to backend server');
         setBackendConnected(false);
+        setActiveModal('connection');
       }
     };
 
@@ -111,6 +120,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     setError(null);
 
     try {
+      // Reconnect socket to new backend URL
+      socketService.disconnect();
+      await socketService.connect();
+      setBackendConnected(true);
+
       const response = await fetch(`${backendConfig.apiUrl}/connect`, {
         method: 'POST',
         headers: {

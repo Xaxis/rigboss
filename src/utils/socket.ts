@@ -18,6 +18,7 @@ class SocketService {
 
       // Use provided URL or get from centralized config
       const resolvedUrl = url || backendConfig.socketUrl;
+      console.log('[Socket] Connecting to:', resolvedUrl);
       this.socket = io(resolvedUrl, {
         path: '/socket.io',
         transports: ['polling', 'websocket'], // Try polling first

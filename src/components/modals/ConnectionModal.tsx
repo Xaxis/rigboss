@@ -28,13 +28,13 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
     },
     {
       name: 'Raspberry Pi',
-      host: '10.0.0.20',
+      host: 'raspberrypi.local',
       description: 'Radio server on Raspberry Pi'
     },
     {
       name: 'Custom Network',
-      host: '192.168.1.100',
-      description: 'Radio server on custom IP'
+      host: '',
+      description: 'Enter your radio server IP'
     },
   ];
 

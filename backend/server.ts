@@ -71,6 +71,7 @@ let audioService: WebRTCAudioService | null = null;
   await audioService.init();
   audioService.attachNamespace();
 })();
+
 // rigctld event handlers
 rigctlService.on('connected', () => {
   console.log('rigctld connected');
