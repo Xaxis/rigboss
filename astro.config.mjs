@@ -21,18 +21,5 @@ export default defineConfig({
     define: {
       __BACKEND_URL__: JSON.stringify(process.env.BACKEND_URL || 'http://localhost:3001'),
     },
-    server: {
-      proxy: {
-        '/api': {
-          target: 'http://localhost:3001',
-          changeOrigin: true,
-        },
-        '/socket.io': {
-          target: 'http://localhost:3001',
-          changeOrigin: true,
-          ws: true,
-        },
-      },
-    },
   },
 });

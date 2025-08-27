@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { backendConfig } from '@/utils/backendConfig';
 
 export type AudioEngineEvents = {
   onAvailable?: (available: boolean) => void;
@@ -28,16 +29,7 @@ export class AudioEngine {
   }
 
   async start(): Promise<void> {
-    // Auto-detect backend URL like the main socket service
-    const currentHost = window.location.hostname;
-    let backendUrl: string;
-    if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
-      backendUrl = 'http://localhost:3001/audio';
-    } else {
-      backendUrl = `http://${currentHost}:3001/audio`;
-    }
-
-    this.socket = io(backendUrl, { path: '/socket.io' });
+    this.socket = io(backendConfig.audioUrl, { path: '/socket.io' });
 
     await new Promise<void>((resolve, reject) => {
       this.socket!.on('connect', () => resolve());

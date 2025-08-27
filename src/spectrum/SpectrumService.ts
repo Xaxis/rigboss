@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { backendConfig } from '@/utils/backendConfig';
 
 export type SpectrumFrame = {
   centerHz: number;
@@ -29,9 +30,7 @@ export class SpectrumService {
   };
 
   connect(): void {
-    const host = window.location.hostname;
-    const url = host === 'localhost' || host === '127.0.0.1' ? 'http://localhost:3001/spectrum' : `http://${host}:3001/spectrum`;
-    this.socket = io(url, { path: '/socket.io' });
+    this.socket = io(backendConfig.spectrumUrl, { path: '/socket.io' });
     this.socket.on('spectrum-frame', (frame: { centerHz: number; spanHz: number; sampleRate: number; bins: number[] | Float32Array }) => {
       const bins = frame.bins instanceof Float32Array ? frame.bins : Float32Array.from(frame.bins);
       this.emit({ centerHz: frame.centerHz, spanHz: frame.spanHz, sampleRate: frame.sampleRate, bins });

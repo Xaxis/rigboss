@@ -6,7 +6,6 @@
   "scripts": {
     "postinstall": "npm run setup",
     "setup": "node scripts/setup.js",
-    "test-audio": "node scripts/test-audio.js",
     "check-audio": "node scripts/check-audio.js",
     "test-pipeline": "node scripts/test-pipeline.js",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",

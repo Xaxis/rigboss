@@ -1,9 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import type { WebSocketMessage, RadioState, RigctlCommand } from '@/types/radio';
-
-// Provided by Vite define() in astro.config.mjs when present
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-declare const __BACKEND_URL__: string | undefined;
+import { backendConfig } from './backendConfig';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -19,19 +16,8 @@ class SocketService {
         return;
       }
 
-      // Auto-detect backend URL based on current location
-      let resolvedUrl = url;
-      if (!resolvedUrl) {
-        const currentHost = window.location.hostname;
-        const currentPort = window.location.port;
-        if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
-          // Local dev: backend on 3001
-          resolvedUrl = 'http://localhost:3001';
-        } else {
-          // Pi deployment: same host, port 3001
-          resolvedUrl = `http://${currentHost}:3001`;
-        }
-      }
+      // Use provided URL or get from centralized config
+      const resolvedUrl = url || backendConfig.socketUrl;
       this.socket = io(resolvedUrl, {
         path: '/socket.io',
         transports: ['polling', 'websocket'], // Try polling first

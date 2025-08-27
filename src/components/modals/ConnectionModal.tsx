@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import { backendConfig } from '@/utils/backendConfig';
 
 interface ConnectionModalProps {
   isOpen: boolean;
@@ -18,7 +19,9 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
 }) => {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('4532');
+  const [backendUrl, setBackendUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const presets = [
     { 
@@ -44,7 +47,23 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    
+
+    // Update backend URL if provided
+    if (backendUrl.trim()) {
+      try {
+        backendConfig.setBackendUrl(backendUrl.trim());
+        // Test the connection
+        const isReachable = await backendConfig.testConnection();
+        if (!isReachable) {
+          setError('Cannot reach backend server at the specified URL');
+          return;
+        }
+      } catch (err) {
+        setError('Invalid backend URL');
+        return;
+      }
+    }
+
     try {
       await onConnect(host, parseInt(port));
       onClose();
@@ -80,6 +99,43 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({
         {/* Description */}
         <div className="text-sm text-gray-600 dark:text-gray-400">
           <p>Connect to rigctld running on your Raspberry Pi or other device to control your radio.</p>
+        </div>
+
+        {/* Backend Configuration */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+              Backend Server
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              {showAdvanced ? 'Hide Advanced' : 'Advanced Settings'}
+            </button>
+          </div>
+
+          {showAdvanced && (
+            <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Backend URL (optional)
+                </label>
+                <Input
+                  type="text"
+                  value={backendUrl}
+                  onChange={(e) => setBackendUrl(e.target.value)}
+                  placeholder="e.g., 10.0.0.20 or http://192.168.1.100:3001"
+                  disabled={connecting}
+                  className="text-sm"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Leave empty to auto-detect. Use this when running frontend and backend on different machines.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Presets */}

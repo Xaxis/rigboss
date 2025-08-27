@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { socketService } from '@/utils/socket';
+import { backendConfig } from '@/utils/backendConfig';
 import ThemeProvider from '@/contexts/ThemeContext';
 import Header from './Header';
 import Sidebar from './Sidebar';
@@ -43,7 +44,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         setBackendConnected(true);
 
         // 2) Ask backend for current health; set radio state accordingly
-        const healthRes = await fetch('/api/health');
+        const healthRes = await fetch(`${backendConfig.apiUrl}/health`);
         if (healthRes.ok) {
           const health = await healthRes.json();
           setRadioConnected(!!health?.rigctld?.connected);
@@ -53,7 +54,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         // 3) Auto-connect to local rigctld on the Pi
         try {
           setConnecting(true);
-          const res = await fetch('/api/connect', {
+          const res = await fetch(`${backendConfig.apiUrl}/connect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ host: 'localhost', port: 4532 })
@@ -110,7 +111,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     setError(null);
     
     try {
-      const response = await fetch('/api/connect', {
+      const response = await fetch(`${backendConfig.apiUrl}/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
