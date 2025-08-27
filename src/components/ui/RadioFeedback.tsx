@@ -28,25 +28,22 @@ const RadioFeedback: React.FC<RadioFeedbackProps> = ({
 
   return (
     <div className={`relative ${className}`}>
-      {/* Live indicator */}
-      <div className="absolute -top-1 -right-1 z-10">
-        {isLive ? (
-          <div className="flex items-center space-x-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-xs text-green-600 dark:text-green-400 font-medium">LIVE</span>
-          </div>
-        ) : (
-          <div className="flex items-center space-x-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full" />
-            <span className="text-xs text-gray-500 font-medium">
-              {lastUpdated ? getTimeAgo(lastUpdated) : 'CACHED'}
-            </span>
-          </div>
-        )}
+      {/* Live indicator - tighter spacing, top-right chip */}
+      <div className="absolute -top-2 -right-2 z-10">
+        <div className={`px-2 py-0.5 rounded-full border text-[10px] leading-none flex items-center space-x-1 shadow-sm ${
+          isLive
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300'
+            : 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500'
+        }`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+          <span>{isLive ? 'LIVE' : lastUpdated ? getTimeAgo(lastUpdated) : 'CACHED'}</span>
+        </div>
       </div>
 
       {/* Control content */}
-      <div className={`${isLive ? 'ring-2 ring-green-500/20' : 'ring-1 ring-gray-300 dark:ring-gray-600'} rounded-lg transition-all duration-200`}>
+      <div className={`${isLive ? 'ring-2 ring-green-500/20' : 'ring-1 ring-gray-300 dark:ring-gray-600'} rounded-lg transition-all duration-200`}
+        style={{ paddingTop: '6px' }}
+      >
         {children}
       </div>
     </div>

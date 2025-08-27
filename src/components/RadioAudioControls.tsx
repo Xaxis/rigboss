@@ -91,7 +91,7 @@ const ToggleControl: React.FC<ToggleControlProps> = ({
 const RadioAudioControls: React.FC = () => {
   const { radioState, radioConnected, addToast } = useAppStore();
   
-  // Local state for audio levels
+  // Local state for audio levels (defaults; will hydrate from radioState)
   const [audioLevels, setAudioLevels] = useState({
     volume: 50,
     rfGain: 50,
@@ -102,6 +102,34 @@ const RadioAudioControls: React.FC = () => {
     noiseReduction: 0,
     agc: 3, // Medium
   });
+
+  // Hydrate from radioState.audioLevels
+  useEffect(() => {
+    const al = radioState.audioLevels;
+    if (!al) return;
+    setAudioLevels({
+      volume: al.af ?? 50,
+      rfGain: al.rf ?? 50,
+      micGain: al.micGain ?? 50,
+      squelch: al.sql ?? 10,
+      voxGain: al.voxGain ?? 50,
+      compressor: al.comp ?? 0,
+      noiseReduction: al.nr ?? 0,
+      agc: al.agc ?? 3,
+    });
+
+    // Mark levels as live upon hydration
+    setLiveStatus({
+      AF: { isLive: true, lastUpdated: new Date() },
+      RF: { isLive: true, lastUpdated: new Date() },
+      MICGAIN: { isLive: true, lastUpdated: new Date() },
+      SQL: { isLive: true, lastUpdated: new Date() },
+      NR: { isLive: true, lastUpdated: new Date() },
+      COMP: { isLive: true, lastUpdated: new Date() },
+      AGC: { isLive: true, lastUpdated: new Date() },
+      VOXGAIN: { isLive: true, lastUpdated: new Date() },
+    });
+  }, [radioState.audioLevels]);
 
   const [audioFunctions, setAudioFunctions] = useState({
     vox: false,
@@ -253,7 +281,7 @@ const RadioAudioControls: React.FC = () => {
         <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Advanced Audio</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <AudioControl
+            <RadioControl
               label="VOX Gain"
               value={audioLevels.voxGain}
               onChange={(value) => {
@@ -261,8 +289,10 @@ const RadioAudioControls: React.FC = () => {
                 handleLevelChange('VOXGAIN', value);
               }}
               disabled={!radioConnected || isLoading}
+              isLive={liveStatus.VOXGAIN?.isLive || false}
+              lastUpdated={liveStatus.VOXGAIN?.lastUpdated}
             />
-            <AudioControl
+            <RadioControl
               label="Speech Compressor"
               value={audioLevels.compressor}
               onChange={(value) => {
@@ -270,8 +300,10 @@ const RadioAudioControls: React.FC = () => {
                 handleLevelChange('COMP', value);
               }}
               disabled={!radioConnected || isLoading}
+              isLive={liveStatus.COMP?.isLive || false}
+              lastUpdated={liveStatus.COMP?.lastUpdated}
             />
-            <AudioControl
+            <RadioControl
               label="Noise Reduction"
               value={audioLevels.noiseReduction}
               onChange={(value) => {
@@ -279,6 +311,8 @@ const RadioAudioControls: React.FC = () => {
                 handleLevelChange('NR', value);
               }}
               disabled={!radioConnected || isLoading}
+              isLive={liveStatus.NR?.isLive || false}
+              lastUpdated={liveStatus.NR?.lastUpdated}
             />
           </div>
           
