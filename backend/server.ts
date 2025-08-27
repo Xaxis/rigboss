@@ -38,7 +38,7 @@ const config = {
 };
 
 // Initialize rigctld service
-const rigctlService = new RigctlService(config.rigctld);
+let rigctlService: RigctlService = new RigctlService(config.rigctld);
 let pollingInterval: NodeJS.Timeout | null = null;
 
 // Radio state polling
@@ -88,6 +88,14 @@ rigctlService.on('error', (error) => {
   console.error('rigctld error:', error);
   io.emit('error', { message: error.message });
 });
+// Auto-connect to rigctld on startup if config points local (sane default on Pi)
+(async () => {
+  try {
+    await rigctlService.connect();
+  } catch (e) {
+    console.log('rigctld not available at startup; will connect when client opens UI');
+  }
+})();
 
 rigctlService.on('stateChanged', (state: Partial<RadioState>) => {
   io.emit('radio_state', state);
@@ -97,10 +105,10 @@ rigctlService.on('stateChanged', (state: Partial<RadioState>) => {
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
-  // Try to connect to rigctld when first client connects (if not already connected)
+  // Ensure connection if not already connected
   if (!rigctlService.isConnected()) {
     console.log('Client connected - attempting to connect to rigctld...');
-    rigctlService.connect().catch(error => {
+    rigctlService.connect().catch(() => {
       console.log('rigctld not available - continuing without radio connection');
     });
   }
@@ -203,37 +211,40 @@ app.post('/api/connect', async (req, res) => {
     if (host) config.rigctld.host = host;
     if (port) config.rigctld.port = port;
 
-    // Disconnect if already connected
+    // Disconnect and stop polling old service if connected
     if (rigctlService.isConnected()) {
+      stopPolling();
       rigctlService.disconnect();
     }
 
-    // Create new service with updated config
+    // Create and connect a new service with updated config
+    // Prepare a new service and attach handlers BEFORE connect so we don't miss events
     const newService = new RigctlService(config.rigctld);
-
-    // Copy event handlers
     newService.on('connected', () => {
       console.log('rigctld connected');
       io.emit('connection_status', { connected: true });
-      startPolling();
     });
-
     newService.on('disconnected', () => {
       console.log('rigctld disconnected');
       io.emit('connection_status', { connected: false });
       stopPolling();
     });
-
     newService.on('error', (error) => {
       console.error('rigctld error:', error);
       io.emit('error', { message: error.message });
     });
-
     newService.on('stateChanged', (state) => {
       io.emit('radio_state', state);
     });
 
     await newService.connect();
+
+    // Swap global service reference so the rest of the server uses the new connection
+    rigctlService = newService;
+
+    // Start polling with the new service and emit connection status explicitly
+    startPolling();
+    io.emit('connection_status', { connected: true });
 
     res.json({
       success: true,
