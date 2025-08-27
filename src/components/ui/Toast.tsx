@@ -138,14 +138,26 @@ interface ToastManagerProps {
 }
 
 export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) => {
-  return (
-    <div className="fixed top-4 right-4 pointer-events-none" style={{ zIndex: 9999 }}>
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  const toastContainer = (
+    <div
+      className="fixed top-4 right-4 pointer-events-none"
+      style={{ zIndex: 9999 }}
+    >
       {toasts.map((toast, index) => (
         <div
           key={toast.id}
           style={{
             marginTop: index > 0 ? '0.5rem' : '0',
-            zIndex: 9999 + index
+            zIndex: 9999 + index,
+            transform: `translateY(${index * 2}px)` // Slight stagger effect
           }}
           className="pointer-events-auto"
         >
@@ -154,6 +166,8 @@ export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) 
       ))}
     </div>
   );
+
+  return createPortal(toastContainer, document.body);
 };
 
 export default Toast;

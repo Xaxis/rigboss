@@ -191,9 +191,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         />
 
       </div>
-
-      {/* Toast Notifications - Rendered outside main layout for proper overlay */}
-      <ToastManager toasts={toasts} onRemove={removeToast} />
     </ThemeProvider>
   );
 };

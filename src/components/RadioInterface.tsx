@@ -16,6 +16,7 @@ import ActivityLogs from './ActivityLogs';
 import MiniSpectrum from './MiniSpectrum';
 import AudioStatus from './ui/AudioStatus';
 import Button from './ui/Button';
+import { ToastManager } from './ui/Toast';
 
 const RadioInterface: React.FC = () => {
   const {
@@ -28,6 +29,8 @@ const RadioInterface: React.FC = () => {
     activeView,
     addActivityLog,
     config,
+    toasts,
+    removeToast,
   } = useAppStore();
 
   // Radio control handlers
@@ -222,7 +225,7 @@ const RadioInterface: React.FC = () => {
                 </div>
 
                 {/* Essential Controls Row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-6">
                   {/* Mode Control */}
                   <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                     <ModeSelector
@@ -357,6 +360,9 @@ const RadioInterface: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Toast Notifications - Rendered via portal to body */}
+      <ToastManager toasts={toasts} onRemove={removeToast} />
     </AppLayout>
   );
 };
