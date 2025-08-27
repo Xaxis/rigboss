@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const { spawn } = require('child_process');
-const { platform } = require('os');
+import { spawn } from 'child_process';
+import { platform } from 'os';
 
 console.log('🎵 Audio Pipeline Test');
 console.log('=====================');

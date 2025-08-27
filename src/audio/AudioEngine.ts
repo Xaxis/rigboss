@@ -4,6 +4,7 @@ export type AudioEngineEvents = {
   onAvailable?: (available: boolean) => void;
   onConnected?: () => void;
   onError?: (message: string) => void;
+  onRxLevel?: (level: number) => void;
 };
 
 // Cross-platform audio engine using WebSocket + raw audio
@@ -58,7 +59,13 @@ export class AudioEngine {
     });
 
     this.socket.on('audio-error', (e: { message: string }) => {
+      console.error('[AudioEngine] Server audio error:', e.message);
       this.events.onError?.(e.message);
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('[AudioEngine] Disconnected from audio server');
+      this.events.onError?.('Audio connection lost');
     });
 
     // Initialize audio context for playback
@@ -76,9 +83,14 @@ export class AudioEngine {
 
       // Convert Int16 to Float32 and add to queue
       const floatSamples = new Float32Array(samples.length);
+      let maxLevel = 0;
       for (let i = 0; i < samples.length; i++) {
         floatSamples[i] = samples[i] / 32768.0;
+        maxLevel = Math.max(maxLevel, Math.abs(floatSamples[i]));
       }
+
+      // Report audio level (0-100)
+      this.events.onRxLevel?.(Math.min(100, maxLevel * 100));
 
       this.audioQueue.push(floatSamples);
 

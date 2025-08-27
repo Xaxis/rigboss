@@ -87,23 +87,31 @@ export class WebRTCAudioService {
       case 'linux':
         // Try to detect available ALSA devices
         try {
-          const { execSync } = require('child_process');
-          const output = execSync('arecord -l 2>/dev/null || echo "default"', { encoding: 'utf8' });
+          const { execSync } = await import('child_process');
+          const output = execSync('arecord -l 2>/dev/null || echo "none"', { encoding: 'utf8' });
 
-          // Look for USB audio devices first
+          console.log('[Audio] Available input devices:', output.trim());
+
+          // Look for USB audio devices first (common for ham radios)
           const usbMatch = output.match(/card (\d+).*USB/i);
           if (usbMatch) {
-            return `plughw:${usbMatch[1]},0`;
+            const device = `plughw:${usbMatch[1]},0`;
+            console.log(`[Audio] Using USB input device: ${device}`);
+            return device;
           }
 
-          // Fall back to first available card
+          // Look for any audio device
           const cardMatch = output.match(/card (\d+)/);
           if (cardMatch) {
-            return `plughw:${cardMatch[1]},0`;
+            const device = `plughw:${cardMatch[1]},0`;
+            console.log(`[Audio] Using input device: ${device}`);
+            return device;
           }
 
+          console.log('[Audio] No specific devices found, using default');
           return 'default';
-        } catch {
+        } catch (error) {
+          console.warn('[Audio] Device detection failed:', error);
           return 'default';
         }
       case 'darwin':
@@ -121,23 +129,31 @@ export class WebRTCAudioService {
       case 'linux':
         // Try to detect available ALSA devices
         try {
-          const { execSync } = require('child_process');
-          const output = execSync('aplay -l 2>/dev/null || echo "default"', { encoding: 'utf8' });
+          const { execSync } = await import('child_process');
+          const output = execSync('aplay -l 2>/dev/null || echo "none"', { encoding: 'utf8' });
 
-          // Look for USB audio devices first
+          console.log('[Audio] Available output devices:', output.trim());
+
+          // Look for USB audio devices first (common for ham radios)
           const usbMatch = output.match(/card (\d+).*USB/i);
           if (usbMatch) {
-            return `plughw:${usbMatch[1]},0`;
+            const device = `plughw:${usbMatch[1]},0`;
+            console.log(`[Audio] Using USB output device: ${device}`);
+            return device;
           }
 
-          // Fall back to first available card
+          // Look for any audio device
           const cardMatch = output.match(/card (\d+)/);
           if (cardMatch) {
-            return `plughw:${cardMatch[1]},0`;
+            const device = `plughw:${cardMatch[1]},0`;
+            console.log(`[Audio] Using output device: ${device}`);
+            return device;
           }
 
+          console.log('[Audio] No specific devices found, using default');
           return 'default';
-        } catch {
+        } catch (error) {
+          console.warn('[Audio] Device detection failed:', error);
           return 'default';
         }
       case 'darwin':
@@ -192,7 +208,15 @@ export class WebRTCAudioService {
 
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
+    let hasStarted = false;
+    let dataCount = 0;
+
     ffmpeg.stdout.on('data', (chunk: Buffer) => {
+      if (!hasStarted) {
+        hasStarted = true;
+        console.log(`[Audio] RX stream started for client ${clientId}, receiving data`);
+      }
+      dataCount++;
       // Send raw PCM data to client via WebSocket
       socket.emit('audio-data', chunk);
     });
@@ -200,13 +224,24 @@ export class WebRTCAudioService {
     ffmpeg.stderr.on('data', (data) => {
       const message = data.toString();
       // Only log actual errors, not version info
-      if (message.includes('Error') || message.includes('error') || message.includes('failed')) {
-        console.warn('[Audio] ffmpeg error:', message.trim());
+      if (message.includes('Error') || message.includes('error') || message.includes('failed') || message.includes('Input/output error')) {
+        console.error('[Audio] ffmpeg error:', message.trim());
+        // Notify client of audio error
+        socket.emit('audio-error', { message: 'Audio capture failed - check device connection' });
       }
     });
 
     ffmpeg.on('close', (code) => {
-      console.log('[Audio] RX process closed with code', code);
+      console.log(`[Audio] RX process closed with code ${code} (sent ${dataCount} chunks)`);
+      this.rxProcs.delete(clientId);
+      if (code !== 0) {
+        socket.emit('audio-error', { message: 'Audio capture stopped unexpectedly' });
+      }
+    });
+
+    ffmpeg.on('error', (error) => {
+      console.error('[Audio] ffmpeg spawn error:', error);
+      socket.emit('audio-error', { message: 'Failed to start audio capture' });
       this.rxProcs.delete(clientId);
     });
 

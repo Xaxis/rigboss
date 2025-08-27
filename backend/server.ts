@@ -208,8 +208,8 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/audio/devices', async (req, res) => {
   try {
-    const { execSync } = require('child_process');
-    const { platform } = require('os');
+    const { execSync } = await import('child_process');
+    const { platform } = await import('os');
 
     const result: any = { platform: platform() };
 

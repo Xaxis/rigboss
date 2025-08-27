@@ -51,7 +51,11 @@ const AudioSystem: React.FC = () => {
         setIsReceivingAudio(true);
         addToast({ type: 'success', title: 'Audio connected', message: 'Receiving radio audio' });
       },
-      onError: (msg) => addToast({ type: 'error', title: 'Audio error', message: msg })
+      onError: (msg) => {
+        setIsReceivingAudio(false);
+        addToast({ type: 'error', title: 'Audio error', message: msg });
+      },
+      onRxLevel: (level) => setRxAudioLevel(level)
     });
     engineRef.current = engine;
     if (audioElRef.current) engine.attachOutputElement(audioElRef.current);
@@ -431,11 +435,25 @@ const AudioSystem: React.FC = () => {
       <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
         <h4 className="font-medium text-gray-900 dark:text-white mb-4">Audio Status</h4>
         <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${isReceivingAudio ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-            <span className="text-sm text-gray-700 dark:text-gray-300">
-              RX Audio {isReceivingAudio ? 'Active' : 'Inactive'}
-            </span>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <div className={`w-3 h-3 rounded-full ${isReceivingAudio ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                RX Audio {isReceivingAudio ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            {isReceivingAudio && (
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500">Level:</span>
+                <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all duration-100"
+                    style={{ width: `${Math.min(100, rxAudioLevel)}%` }}
+                  />
+                </div>
+                <span className="text-xs text-gray-500 w-8">{Math.round(rxAudioLevel)}%</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-2">
             <div className={`w-3 h-3 rounded-full ${isTransmitting ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`} />
