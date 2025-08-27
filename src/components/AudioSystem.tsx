@@ -30,85 +30,48 @@ const AudioSystem: React.FC = () => {
   // Initialize audio devices
   useEffect(() => {
     const initAudio = async () => {
-      if (typeof window === 'undefined') return;
-
-      // Try to get devices directly - browsers usually allow this even without HTTPS
-
-      if (!window.navigator?.mediaDevices) {
-        console.warn('Media devices API not available');
-        addToast({
-          type: 'error',
-          title: 'Audio Not Supported',
-          message: 'Your browser does not support audio device access.'
-        });
+      if (typeof window === 'undefined' || !navigator.mediaDevices) {
         return;
       }
 
       try {
-        // Request permission first to get device labels
-        let stream: MediaStream | null = null;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          console.log('Got microphone permission');
-        } catch (permError) {
-          console.warn('Microphone permission denied, device labels may be limited');
-        }
+        // Get devices without permission first
+        let devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('Initial devices:', devices);
 
-        // Get all devices
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        console.log('Found devices:', devices);
-
-        // Stop the permission stream
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
+        // If no labels, try to get permission
+        if (devices.length > 0 && !devices[0].label) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            devices = await navigator.mediaDevices.enumerateDevices();
+            console.log('Devices after permission:', devices);
+          } catch (e) {
+            console.warn('Permission denied, using unlabeled devices');
+          }
         }
 
         setAudioDevices(devices);
 
-        // Auto-select first available devices
         const mics = devices.filter(d => d.kind === 'audioinput');
         const speakers = devices.filter(d => d.kind === 'audiooutput');
 
-        console.log('Microphones found:', mics.length);
-        console.log('Speakers found:', speakers.length);
+        console.log('Mics:', mics.length, 'Speakers:', speakers.length);
 
-        if (mics.length > 0 && (!selectedMicrophone || selectedMicrophone === '')) {
+        // Auto-select first devices
+        if (mics.length > 0 && !selectedMicrophone) {
           setSelectedMicrophone(mics[0].deviceId);
-          console.log('Auto-selected microphone:', mics[0]);
         }
-        if (speakers.length > 0 && (!selectedSpeaker || selectedSpeaker === '')) {
+        if (speakers.length > 0 && !selectedSpeaker) {
           setSelectedSpeaker(speakers[0].deviceId);
-          console.log('Auto-selected speaker:', speakers[0]);
-        }
-
-        if (mics.length === 0) {
-          addToast({
-            type: 'error',
-            title: 'No Microphones Found',
-            message: 'No microphones detected. Check device connections and browser permissions.'
-          });
-        }
-
-        if (speakers.length === 0) {
-          addToast({
-            type: 'warning',
-            title: 'No Speakers Found',
-            message: 'No speakers detected. Audio will use default output.'
-          });
         }
       } catch (error) {
-        console.error('Failed to get audio devices:', error);
-        addToast({
-          type: 'error',
-          title: 'Audio Device Error',
-          message: 'Cannot access audio devices. Check browser settings.'
-        });
+        console.error('Device enumeration failed:', error);
       }
     };
 
-    const timer = setTimeout(initAudio, 500);
-    return () => clearTimeout(timer);
-  }, [addToast]);
+    initAudio();
+  }, [selectedMicrophone, selectedSpeaker, setAudioDevices, setSelectedMicrophone, setSelectedSpeaker]);
 
   // Initialize global audio engine
   useEffect(() => {
