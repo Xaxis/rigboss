@@ -103,33 +103,8 @@ const RadioAudioControls: React.FC = () => {
     agc: 3, // Medium
   });
 
-  // Hydrate from radioState.audioLevels
-  useEffect(() => {
-    const al = radioState.audioLevels;
-    if (!al) return;
-    setAudioLevels({
-      volume: al.af ?? 50,
-      rfGain: al.rf ?? 50,
-      micGain: al.micGain ?? 50,
-      squelch: al.sql ?? 10,
-      voxGain: al.voxGain ?? 50,
-      compressor: al.comp ?? 0,
-      noiseReduction: al.nr ?? 0,
-      agc: al.agc ?? 3,
-    });
-
-    // Mark levels as live upon hydration
-    setLiveStatus({
-      AF: { isLive: true, lastUpdated: new Date() },
-      RF: { isLive: true, lastUpdated: new Date() },
-      MICGAIN: { isLive: true, lastUpdated: new Date() },
-      SQL: { isLive: true, lastUpdated: new Date() },
-      NR: { isLive: true, lastUpdated: new Date() },
-      COMP: { isLive: true, lastUpdated: new Date() },
-      AGC: { isLive: true, lastUpdated: new Date() },
-      VOXGAIN: { isLive: true, lastUpdated: new Date() },
-    });
-  }, [radioState.audioLevels]);
+  // Note: Audio level hydration from rigctl removed due to unsupported commands
+  // Audio levels will be set manually and cached locally
 
   const [audioFunctions, setAudioFunctions] = useState({
     vox: false,

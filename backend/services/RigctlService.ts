@@ -302,27 +302,6 @@ export class RigctlService extends EventEmitter {
     // Convert 0-100 range to 0.0-1.0 for rigctl
     const normalizedValue = Math.max(0, Math.min(100, value)) / 100;
     await this.sendCommand(`L ${level} ${normalizedValue}`);
-
-    // Update cached state and emit immediately for responsive UI
-    const lvl = level.toUpperCase();
-    const map: Record<string, string> = {
-      'AF': 'af',
-      'RF': 'rf',
-      'MICGAIN': 'micGain',
-      'SQL': 'sql',
-      'VOXGAIN': 'voxGain',
-      'COMP': 'comp',
-      'NR': 'nr',
-      'AGC': 'agc',
-      'RFPOWER': 'rfPower',
-    };
-    const key = map[lvl];
-    if (key) {
-      const audioLevels: any = { ...(this.currentRadioState as any).audioLevels };
-      audioLevels[key] = value;
-      (this.currentRadioState as any).audioLevels = audioLevels;
-      this.emit('stateChanged', { audioLevels });
-    }
   }
 
   async getAudioLevel(level: string): Promise<number> {
@@ -424,18 +403,6 @@ export class RigctlService extends EventEmitter {
       const ptt = await this.getPTT().catch(() => this.currentRadioState.ptt || false);
       const radioInfo = await this.getRadioInfo().catch(() => ({ model: 'Unknown', version: 'Unknown' }));
 
-      // Query audio levels (best-effort)
-      const [af, rf, mic, sql, nr, comp, agc, voxGain] = await Promise.all([
-        this.getVolume().catch(() => 0),
-        this.getRFGain().catch(() => 0),
-        this.getMicGain().catch(() => 0),
-        this.getSquelch().catch(() => 0),
-        this.getNoiseReduction().catch(() => 0),
-        this.getCompressor().catch(() => 0),
-        this.getAGC().catch(() => 3), // MEDIUM fallback
-        this.getVOXGain().catch(() => 0),
-      ]);
-
       const state: RadioState = {
         frequency,
         mode: modeInfo.mode,
@@ -444,12 +411,9 @@ export class RigctlService extends EventEmitter {
         ptt,
         connected: this.connected,
         model: radioInfo.model,
-        squelch: sql,
-        volume: af,
-        antenna: 1,
-        audioLevels: {
-          af, rf, micGain: mic, sql, nr, comp, agc, voxGain, rfPower: power, preamp: 0, att: 0
-        },
+        squelch: 0, // TODO: Implement squelch reading
+        volume: 0,  // TODO: Implement volume reading
+        antenna: 1  // TODO: Implement antenna reading
       };
 
       this.currentRadioState = state;
