@@ -70,7 +70,7 @@ export class WebRTCAudioService {
 
       socket.on('mic-data', (audioData: ArrayBuffer) => {
         if (this.txEnabled) {
-          this.handleMicData(audioData);
+          this.handleMicData(audioData).catch(console.error);
         }
       });
 
@@ -223,7 +223,7 @@ export class WebRTCAudioService {
     }
   }
 
-  private handleMicData(audioData: ArrayBuffer): void {
+  private async handleMicData(audioData: ArrayBuffer): Promise<void> {
     if (!this.txEnabled || !this.available) return;
 
     // Start TX process if not already running
