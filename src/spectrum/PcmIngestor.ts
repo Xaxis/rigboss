@@ -3,8 +3,8 @@
 
 import { SpectrumService } from '@/spectrum/SpectrumService';
 
-const FFT_SIZE = 4096; // power of 2
-const BINS = 1024;     // draw resolution (decimate magnitudes)
+const FFT_SIZE = 2048; // power of 2
+const BINS = 512;      // draw resolution (decimate magnitudes)
 
 function hannWindow(n: number): Float32Array {
   const w = new Float32Array(n);
@@ -57,10 +57,17 @@ export function attachPcmIngestor(service: SpectrumService) {
   const ring = new Float32Array(FFT_SIZE);
   let writeIdx = 0;
   let filled = false;
+  let frameCount = 0;
+  let sampleCount = 0;
 
   function onPcm(e: Event) {
     const detail = (e as CustomEvent).detail as { samples: Float32Array; sampleRate: number };
     const { samples, sampleRate } = detail;
+
+    sampleCount++;
+    if (sampleCount === 1) {
+      console.log('[Spectrum] First PCM samples received:', samples.length, 'samples at', sampleRate, 'Hz');
+    }
 
     // Write into ring buffer
     for (let i = 0; i < samples.length; i++) {
@@ -69,6 +76,10 @@ export function attachPcmIngestor(service: SpectrumService) {
     }
 
     if (!filled) return; // wait until we have one full window
+
+    // Only process every 4th frame to reduce CPU load
+    frameCount++;
+    if (frameCount % 4 !== 0) return;
 
     // Assemble windowed frame (oldest..newest)
     const frame = new Float32Array(FFT_SIZE);
@@ -102,8 +113,13 @@ export function attachPcmIngestor(service: SpectrumService) {
     }
 
     service.emit({ centerHz: service.getState().centerHz, spanHz: service.getState().spanHz, sampleRate, bins: out });
+
+    if (frameCount % 60 === 0) { // Log every 60 frames (~1 second)
+      console.log('[Spectrum] Emitted frame', frameCount, 'with', out.length, 'bins, max dB:', Math.max(...out).toFixed(1));
+    }
   }
 
+  console.log('[Spectrum] Attaching PCM ingestor to existing audio pipeline');
   window.addEventListener('pcm-samples', onPcm as EventListener);
   return () => window.removeEventListener('pcm-samples', onPcm as EventListener);
 }
