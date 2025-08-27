@@ -361,7 +361,7 @@ const RadioInterface: React.FC = () => {
         </div>
       )}
 
-      {/* Toast Notifications - Rendered via portal to body */}
+      {/* Toast Notifications */}
       <ToastManager toasts={toasts} onRemove={removeToast} />
     </AppLayout>
   );

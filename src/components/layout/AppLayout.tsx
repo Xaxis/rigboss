@@ -155,6 +155,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   return (
     <ThemeProvider>
       <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+        {/* Fixed Toast Container at top-right */}
+        <div id="toast-root" className="fixed top-4 right-4 z-[99999] pointer-events-none max-w-sm space-y-2" />
+
         {/* Header */}
         <Header />
 

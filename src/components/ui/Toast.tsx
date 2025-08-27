@@ -89,17 +89,17 @@ const Toast: React.FC<ToastProps> = ({
       `}>
         <div className="flex items-start">
           <div className="flex-shrink-0">
-            <svg 
-              className={`h-5 w-5 ${style.icon}`} 
-              fill="none" 
-              viewBox="0 0 24 24" 
+            <svg
+              className={`h-5 w-5 ${style.icon}`}
+              fill="none"
+              viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d={style.iconPath} 
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={style.iconPath}
               />
             </svg>
           </div>
@@ -128,7 +128,8 @@ const Toast: React.FC<ToastProps> = ({
     </div>
   );
 
-  return createPortal(toastContent, document.body);
+  // Render inside ToastManager's fixed container; do NOT portal again here
+  return toastContent;
 };
 
 // Toast Manager Component
@@ -180,7 +181,7 @@ export const ToastManager: React.FC<ToastManagerProps> = ({ toasts, onRemove }) 
           key={toast.id}
           style={{
             zIndex: 99999 + index,
-            transform: `translateY(${index * 2}px)` // Slight stagger effect
+            transform: `translateY(${index * 12}px)` // Visible stagger effect
           }}
           className="pointer-events-auto toast-item"
         >
