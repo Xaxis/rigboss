@@ -21,30 +21,54 @@ const AudioSystem: React.FC = () => {
   // Initialize audio devices
   useEffect(() => {
     const initAudio = async () => {
-      if (typeof window === 'undefined' || !window.navigator?.mediaDevices) return;
-      
+      if (typeof window === 'undefined' || !window.navigator?.mediaDevices) {
+        console.warn('Media devices not available');
+        return;
+      }
+
       try {
+        // Request permission first to get device labels
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+          .then(stream => {
+            // Stop the stream immediately, we just needed permission
+            stream.getTracks().forEach(track => track.stop());
+          })
+          .catch(() => {
+            console.warn('Microphone permission denied, device labels may be limited');
+          });
+
         const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('Found audio devices:', devices);
         setAudioDevices(devices);
-        
+
         // Auto-select first available devices
         const mics = devices.filter(d => d.kind === 'audioinput');
         const speakers = devices.filter(d => d.kind === 'audiooutput');
-        
+
+        console.log('Microphones:', mics);
+        console.log('Speakers:', speakers);
+
         if (mics.length > 0 && !selectedMicrophone) {
           setSelectedMicrophone(mics[0].deviceId);
+          console.log('Auto-selected microphone:', mics[0]);
         }
         if (speakers.length > 0 && !selectedSpeaker) {
           setSelectedSpeaker(speakers[0].deviceId);
+          console.log('Auto-selected speaker:', speakers[0]);
         }
       } catch (error) {
         console.error('Failed to get audio devices:', error);
+        addToast({
+          type: 'error',
+          title: 'Audio Device Error',
+          message: 'Failed to access audio devices. Check browser permissions.'
+        });
       }
     };
 
-    const timer = setTimeout(initAudio, 100);
+    const timer = setTimeout(initAudio, 500);
     return () => clearTimeout(timer);
-  }, [selectedMicrophone, selectedSpeaker]);
+  }, [addToast]);
 
   // Initialize audio engine
   useEffect(() => {
@@ -249,6 +273,16 @@ const AudioSystem: React.FC = () => {
               </p>
             </div>
           )}
+
+          {/* Debug Info */}
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-xs">
+            <p><strong>Debug:</strong></p>
+            <p>Total devices found: {audioDevices.length}</p>
+            <p>Microphones: {microphones.length}</p>
+            <p>Speakers: {speakers.length}</p>
+            <p>Selected mic: {selectedMicrophone || 'none'}</p>
+            <p>Selected speaker: {selectedSpeaker || 'none'}</p>
+          </div>
         </div>
       </div>
 
