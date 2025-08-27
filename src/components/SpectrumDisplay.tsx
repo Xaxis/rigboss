@@ -17,6 +17,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     config,
     updateConfig,
     addToast,
+    addActivityLog,
   } = useAppStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,18 +39,38 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
   const [colorScheme, setColorScheme] = useState<'classic' | 'modern' | 'thermal'>('modern');
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [showBandEdges, setShowBandEdges] = useState(true);
+  // Refs that mirror dynamic controls to avoid stale closures in the animation loop
+  const centerFreqRef = useRef(centerFreq);
+  const spanRef = useRef(span);
+  const showGridRef = useRef(showGrid);
+  const peakHoldRef = useRef(peakHold);
+  const showBandEdgesRef = useRef(showBandEdges);
+  const colorSchemeRef = useRef(colorScheme);
+  const waterfallSpeedRef = useRef(waterfallSpeed);
+  const radioFreqRef = useRef<number | null>(radioState.frequency ?? null);
+
+  // Keep refs in sync with state without restarting animation
+  useEffect(() => { centerFreqRef.current = centerFreq; }, [centerFreq]);
+  useEffect(() => { spanRef.current = span; }, [span]);
+  useEffect(() => { showGridRef.current = showGrid; }, [showGrid]);
+  useEffect(() => { peakHoldRef.current = peakHold; }, [peakHold]);
+  useEffect(() => { showBandEdgesRef.current = showBandEdges; }, [showBandEdges]);
+  useEffect(() => { colorSchemeRef.current = colorScheme; }, [colorScheme]);
+  useEffect(() => { waterfallSpeedRef.current = waterfallSpeed; }, [waterfallSpeed]);
+  useEffect(() => { radioFreqRef.current = radioState.frequency ?? null; }, [radioState.frequency]);
+
 
   // Enhanced spectrum data generation with more realistic signals
   const generateSpectrumData = (): number[] => {
     const bins = Math.floor(dimensions.width / 2); // Higher resolution based on width
     const data = new Array(bins);
-    const currentFreq = radioState.frequency || centerFreq;
+    const currentFreq = (radioFreqRef.current ?? centerFreqRef.current);
 
     // Calculate average noise floor
     let noiseSum = 0;
 
     for (let i = 0; i < bins; i++) {
-      const freq = centerFreq - span/2 + (i / bins) * span;
+      const freq = centerFreqRef.current - spanRef.current/2 + (i / bins) * spanRef.current;
       const freqDiff = Math.abs(freq - currentFreq);
 
       // Base noise floor with realistic variation
@@ -132,7 +153,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     ctx.fillRect(margin.left, margin.top, plotWidth, plotHeight);
 
     // Draw grid if enabled
-    if (showGrid) {
+    if (showGridRef.current) {
       ctx.strokeStyle = '#334155';
       ctx.lineWidth = 0.5;
 
@@ -189,7 +210,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     ctx.stroke();
 
     // Draw peak hold if enabled
-    if (peakHold && peakData.length === data.length) {
+    if (peakHoldRef.current && peakData.length === data.length) {
       ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -209,19 +230,19 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     }
 
     // Draw band edges if enabled
-    if (showBandEdges) {
+    if (showBandEdgesRef.current) {
       const visibleBands = amateurBands.filter(band => {
         const bandStart = band.start;
         const bandEnd = band.end;
-        const spanStart = centerFreq - span/2;
-        const spanEnd = centerFreq + span/2;
+        const spanStart = centerFreqRef.current - spanRef.current/2;
+        const spanEnd = centerFreqRef.current + spanRef.current/2;
 
         return (bandStart <= spanEnd && bandEnd >= spanStart);
       });
 
     visibleBands.forEach(band => {
       // Draw band start edge
-      const startOffset = band.start - (centerFreq - span/2);
+      const startOffset = band.start - (centerFreqRef.current - spanRef.current/2);
       const startX = margin.left + (startOffset / span) * plotWidth;
 
       if (startX >= margin.left && startX <= margin.left + plotWidth) {
@@ -236,7 +257,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
       }
 
       // Draw band end edge
-      const endOffset = band.end - (centerFreq - span/2);
+      const endOffset = band.end - (centerFreqRef.current - spanRef.current/2);
       const endX = margin.left + (endOffset / span) * plotWidth;
 
       if (endX >= margin.left && endX <= margin.left + plotWidth) {
@@ -252,7 +273,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
 
       // Draw band label
       const bandCenter = (band.start + band.end) / 2;
-      const bandCenterOffset = bandCenter - (centerFreq - span/2);
+      const bandCenterOffset = bandCenter - (centerFreqRef.current - spanRef.current/2);
       const bandCenterX = margin.left + (bandCenterOffset / span) * plotWidth;
 
       if (bandCenterX >= margin.left && bandCenterX <= margin.left + plotWidth) {
@@ -265,8 +286,8 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     }
 
     // Draw frequency marker for current radio frequency
-    if (radioState.frequency) {
-      const freqOffset = radioState.frequency - (centerFreq - span/2);
+    if (radioFreqRef.current) {
+      const freqOffset = (radioFreqRef.current as number) - (centerFreqRef.current - spanRef.current/2);
       const markerX = margin.left + (freqOffset / span) * plotWidth;
 
       if (markerX >= margin.left && markerX <= margin.left + plotWidth) {
@@ -297,7 +318,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     ctx.font = '11px Inter, sans-serif';
     ctx.textAlign = 'center';
     for (let i = 0; i <= 10; i++) {
-      const freq = centerFreq - span/2 + (i / 10) * span;
+      const freq = centerFreqRef.current - spanRef.current/2 + (i / 10) * spanRef.current;
       const x = margin.left + (i / 10) * plotWidth;
       ctx.fillText(
         `${(freq / 1000000).toFixed(2)}`,
@@ -338,7 +359,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     // Normalize intensity to 0-1
     const norm = Math.max(0, Math.min(1, intensity));
 
-    switch (colorScheme) {
+    switch (colorSchemeRef.current) {
       case 'classic':
         // Blue to green to yellow to red
         if (norm < 0.25) {
@@ -391,7 +412,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     const plotWidth = width - margin.left - margin.right;
 
     // Shift existing data down by waterfallSpeed pixels
-    const shiftAmount = Math.max(1, Math.floor(waterfallSpeed / 2));
+    const shiftAmount = Math.max(1, Math.floor(waterfallSpeedRef.current / 2));
     if (height > shiftAmount) {
       const imageData = ctx.getImageData(margin.left, 0, plotWidth, height - shiftAmount);
       ctx.putImageData(imageData, margin.left, shiftAmount);
@@ -425,8 +446,8 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     }
 
     // Draw frequency marker on waterfall
-    if (radioState.frequency) {
-      const freqOffset = radioState.frequency - (centerFreq - span/2);
+    if (radioFreqRef.current) {
+      const freqOffset = (radioFreqRef.current as number) - (centerFreqRef.current - spanRef.current/2);
       const markerX = margin.left + (freqOffset / span) * plotWidth;
 
       if (markerX >= margin.left && markerX <= margin.left + plotWidth) {
@@ -446,7 +467,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     ctx.font = '10px Inter, sans-serif';
     ctx.textAlign = 'center';
     for (let i = 0; i <= 10; i++) {
-      const freq = centerFreq - span/2 + (i / 10) * span;
+      const freq = centerFreqRef.current - spanRef.current/2 + (i / 10) * spanRef.current;
       const x = margin.left + (i / 10) * plotWidth;
       ctx.fillText(
         `${(freq / 1000000).toFixed(2)}`,
@@ -475,17 +496,17 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
 
   const animate = () => {
     if (!isRunning) return;
-    
+
     const data = generateSpectrumData();
     drawSpectrum(data);
     drawWaterfall(data);
-    
+
     // Update waterfall data for history
     setWaterfallData(prev => {
       const newData = [...prev, data];
       return newData.slice(-200); // Keep last 200 lines
     });
-    
+
     animationRef.current = requestAnimationFrame(animate);
   };
 
@@ -498,7 +519,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
       });
       return;
     }
-    
+
     setIsRunning(true);
     addToast({
       type: 'success',
@@ -521,22 +542,33 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     });
   };
 
-  // Responsive sizing
+  // Responsive sizing - STABLE implementation
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         const newWidth = Math.max(400, rect.width - 32); // Account for padding
         const newHeight = Math.max(200, Math.min(400, newWidth * 0.4)); // Maintain aspect ratio
-        setDimensions({ width: newWidth, height: newHeight });
+
+        // Only update if dimensions actually changed significantly
+        setDimensions(prev => {
+          if (Math.abs(prev.width - newWidth) > 5 || Math.abs(prev.height - newHeight) > 5) {
+            return { width: newWidth, height: newHeight };
+          }
+          return prev;
+        });
       }
     };
 
+    // Initial sizing
     updateDimensions();
 
     // Set up ResizeObserver for responsive updates
     if (containerRef.current) {
-      resizeObserverRef.current = new ResizeObserver(updateDimensions);
+      resizeObserverRef.current = new ResizeObserver(() => {
+        // Debounce resize updates
+        setTimeout(updateDimensions, 100);
+      });
       resizeObserverRef.current.observe(containerRef.current);
     }
 
@@ -547,16 +579,31 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     };
   }, []);
 
-  // Update canvas dimensions when dimensions change
+  // Update canvas dimensions when dimensions change - SAFE implementation
   useEffect(() => {
-    if (canvasRef.current) {
-      canvasRef.current.width = dimensions.width;
-      canvasRef.current.height = dimensions.height;
-    }
-    if (waterfallRef.current) {
-      waterfallRef.current.width = dimensions.width;
-      waterfallRef.current.height = dimensions.height;
-    }
+    const updateCanvasSize = () => {
+      if (canvasRef.current && waterfallRef.current) {
+        // Store current canvas state before resize
+        const spectrumCanvas = canvasRef.current;
+        const waterfallCanvas = waterfallRef.current;
+
+        // Only update if canvas size is actually different
+        if (spectrumCanvas.width !== dimensions.width || spectrumCanvas.height !== dimensions.height) {
+          spectrumCanvas.width = dimensions.width;
+          spectrumCanvas.height = dimensions.height;
+          waterfallCanvas.width = dimensions.width;
+          waterfallCanvas.height = dimensions.height;
+
+          // Clear canvases after resize to prevent corruption
+          const spectrumCtx = spectrumCanvas.getContext('2d');
+          const waterfallCtx = waterfallCanvas.getContext('2d');
+          if (spectrumCtx) spectrumCtx.clearRect(0, 0, dimensions.width, dimensions.height);
+          if (waterfallCtx) waterfallCtx.clearRect(0, 0, dimensions.width, dimensions.height);
+        }
+      }
+    };
+
+    updateCanvasSize();
   }, [dimensions]);
 
   // Auto-start when radio connects
@@ -575,7 +622,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
     }
   }, [radioState.frequency, centerFreq, span]);
 
-  // Animation loop
+  // Animation loop - ONLY depend on isRunning to prevent restart on control changes
   useEffect(() => {
     if (isRunning) {
       animate();
@@ -586,7 +633,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isRunning, dimensions, waterfallSpeed, colorScheme, showGrid, peakHold, showBandEdges, centerFreq, span]);
+  }, [isRunning]);
 
   // Reset peak data when peak hold is disabled
   useEffect(() => {
@@ -872,7 +919,7 @@ const SpectrumDisplay: React.FC<SpectrumDisplayProps> = ({
               style={{
                 left: mousePos.x + 10,
                 top: mousePos.y - 30,
-                transform: mousePos.x > (canvasRef.current?.getBoundingClientRect().width || 800) - 150 ? 'translateX(-100%)' : 'none'
+                transform: mousePos.x > dimensions.width - 150 ? 'translateX(-100%)' : 'none'
               }}
             >
               <div>{(getMouseFrequencyAndSignal()!.freq / 1000000).toFixed(6)} MHz</div>
