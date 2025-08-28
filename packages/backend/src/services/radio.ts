@@ -75,21 +75,31 @@ export class RadioService extends EventEmitter {
 
   async setFrequency(hz: number): Promise<void> {
     await this.adapter.setFrequency(hz);
+    // immediate optimistic state broadcast to improve perceived latency
+    this.state.frequencyHz = hz;
+    this.emitState();
+    // backfill with confirmed state
     await this.refreshState();
   }
 
   async setMode(mode: string, bandwidthHz?: number): Promise<void> {
     await this.adapter.setMode(mode, bandwidthHz);
+    this.state.mode = mode;
+    this.emitState();
     await this.refreshState();
   }
 
   async setPower(power: number): Promise<void> {
     await this.adapter.setPower(power);
+    this.state.power = power;
+    this.emitState();
     await this.refreshState();
   }
 
   async setPTT(ptt: boolean): Promise<void> {
     await this.adapter.setPTT(ptt);
+    this.state.ptt = ptt;
+    this.emitState();
     await this.refreshState();
   }
 

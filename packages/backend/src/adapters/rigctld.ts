@@ -7,6 +7,7 @@ type PendingCmd = {
   reject: (err: Error) => void;
   timeoutMs: number;
   fallbackOnNoRprt?: boolean;
+  priority?: 'HIGH' | 'NORMAL';
 };
 
 function parseResponse(lines: string[]): { result: string[]; code: number | null } {
@@ -192,10 +193,12 @@ class PersistentRigctldClient {
     this.startNext();
   }
 
-  async request(cmd: string, timeoutMs = 5000, opts?: { fallbackOnNoRprt?: boolean }): Promise<string[]> {
+  async request(cmd: string, timeoutMs = 5000, opts?: { fallbackOnNoRprt?: boolean; priority?: 'HIGH' | 'NORMAL' }): Promise<string[]> {
     if (!this.socket) throw new Error('rigctld socket not connected');
     return new Promise<string[]>((resolve, reject) => {
-      this.queue.push({ cmd, resolve, reject, timeoutMs, fallbackOnNoRprt: opts?.fallbackOnNoRprt });
+      const pending: PendingCmd = { cmd, resolve, reject, timeoutMs, fallbackOnNoRprt: opts?.fallbackOnNoRprt, priority: opts?.priority ?? 'NORMAL' };
+      if (pending.priority === 'HIGH') this.queue.unshift(pending);
+      else this.queue.push(pending);
       this.startNext();
     });
   }
