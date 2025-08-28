@@ -115,30 +115,55 @@ export class RigctldAdapter implements RigctlAdapter {
     await this.sendCommand(`T ${ptt ? 1 : 0}`);
   }
 
+  async getSignalStrength(): Promise<number | undefined> {
+    // Try candidates for S-meter; values may be 0.0..1.0
+    for (const token of ['STRENGTH', 'SMETER']) {
+      try {
+        const res = await this.sendCommand(`l ${token}`);
+        const v = parseFloat(res.trim());
+        if (isFinite(v)) {
+          // Map 0..1 -> -120..-40 dBm
+          return Math.round(-120 + v * 80);
+        }
+      } catch {}
+    }
+    return undefined;
+  }
+
+  async getSWR(): Promise<number | undefined> {
+    try {
+      const res = await this.sendCommand('l SWR');
+      const v = parseFloat(res.trim());
+      if (isFinite(v) && v > 0) return parseFloat(v.toFixed(2));
+    } catch {}
+    return undefined;
+  }
+
   async getState(): Promise<Partial<RadioState>> {
     try {
-      const [frequency, modeInfo, power, ptt] = await Promise.all([
+      const [frequency, modeInfo, power, ptt, swr, signal] = await Promise.all([
         this.getFrequency(),
         this.getMode(),
         this.getPower(),
         this.getPTT().catch(() => false),
+        this.getSWR().catch(() => undefined),
+        this.getSignalStrength().catch(() => undefined),
       ]);
 
-      const state = {
+      const state: Partial<RadioState> = {
         connected: this.connected,
         frequencyHz: frequency,
         mode: modeInfo.mode as any,
         bandwidthHz: modeInfo.bandwidth,
-        power: power,
+        power,
         ptt,
         rigModel: 'IC-7300',
       };
-
+      if (typeof swr === 'number') (state as any).swr = swr;
+      if (typeof signal === 'number') (state as any).signalStrength = signal;
       return state;
     } catch (error) {
-      return {
-        connected: false,
-      };
+      return { connected: false };
     }
   }
 }

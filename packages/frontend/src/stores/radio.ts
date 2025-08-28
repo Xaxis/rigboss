@@ -226,6 +226,8 @@ export const useRadioStore = create<RadioStore>()(
         power: typeof (data as any).power === 'number' ? (data as any).power : get().power,
         ptt: typeof (data as any).ptt === 'boolean' ? (data as any).ptt : get().ptt,
         model: (data as any).rigModel ?? get().model,
+        swr: typeof (data as any).swr === 'number' ? (data as any).swr : get().swr,
+        signalStrength: typeof (data as any).signalStrength === 'number' ? (data as any).signalStrength : get().signalStrength,
       };
       set((state) => ({ ...state, ...mapped }));
     },
