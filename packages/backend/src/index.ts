@@ -39,11 +39,7 @@ async function start() {
   // Choose adapter based on environment
   const useRealRadio = config.USE_REAL_RADIO === 'true';
   const rigAdapter = useRealRadio
-    ? new RigctlCommandAdapter({
-        rigModel: config.RIG_MODEL,
-        rigPort: config.RIG_PORT,
-        rigSpeed: config.RIG_SPEED,
-      })
+    ? new RigctldAdapter() // Use daemon adapter for IC-7300
     : new MockRigctlAdapter();
 
   const radio = new RadioService({ adapter: rigAdapter });
@@ -183,38 +179,45 @@ async function start() {
   wireNamespace("/audio");
   wireNamespace("/spectrum");
 
-  // Auto-connect to radio and start polling
+  // Start backend immediately, try radio connection in background
+  app.log.info(
+    { port: config.BACKEND_PORT },
+    `Backend listening on :${config.BACKEND_PORT}`
+  );
+
+  // Try radio connection in background (don't block startup)
   if (useRealRadio) {
-    try {
-      // Try direct rigctl connection first (no rigctld daemon)
-      await radio.connect('', 0); // RigctlCommandAdapter doesn't use host/port
-      app.log.info('Radio connected, starting polling...');
+    // Start with disconnected state
+    setInterval(() => {
+      radio.emit(EVENTS.RADIO_STATE, {
+        connected: false,
+        frequencyHz: 0,
+        mode: 'USB',
+        power: 0,
+        rigModel: 'IC-7300 (Connecting...)',
+      });
+    }, 2000);
 
-      // Poll radio state every 2 seconds
-      setInterval(async () => {
-        try {
-          await radio.refreshState();
-        } catch (error) {
-          app.log.error('Radio polling error:', error);
-        }
-      }, 2000);
-    } catch (error) {
-      app.log.error('Failed to connect to radio:', error);
-      app.log.info('Continuing with mock data...');
+    // Try to connect in background
+    setTimeout(async () => {
+      try {
+        await radio.connect('', 0);
+        app.log.info('✅ Radio connected! Starting real-time polling...');
 
-      // Fall back to mock data if radio connection fails
-      setInterval(() => {
-        radio.emit(EVENTS.RADIO_STATE, {
-          connected: false,
-          frequencyHz: 14200000,
-          mode: 'USB',
-          power: 0,
-          rigModel: 'IC-7300 (Disconnected)',
-        });
-      }, 2000);
-    }
+        // Replace the mock interval with real polling
+        setInterval(async () => {
+          try {
+            await radio.refreshState();
+          } catch (error) {
+            app.log.error('Radio polling error:', error);
+          }
+        }, 1000);
+      } catch (error) {
+        app.log.error('❌ Radio connection failed, continuing with mock data');
+      }
+    }, 1000);
   } else {
-    // For mock mode, simulate some data changes
+    // Mock mode with changing data
     setInterval(() => {
       radio.emit(EVENTS.RADIO_STATE, {
         connected: true,

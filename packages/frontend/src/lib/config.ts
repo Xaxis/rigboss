@@ -2,32 +2,32 @@ import type { Config } from '@/types';
 
 // Get configuration from environment variables and settings
 export function getConfig(): Config {
-  // Try to get from environment first, then fall back to localStorage settings
-  let backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  // Environment variable ALWAYS wins if set
+  const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
+  let backendUrl = 'http://localhost:3001';
 
-  console.log('🔧 Config Debug:');
-  console.log('  Environment VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
-  console.log('  Initial backendUrl:', backendUrl);
-
-  // Check if we have stored settings that override the environment
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('rigboss-ui-store');
-      if (stored) {
-        const state = JSON.parse(stored);
-        const settingsBackendUrl = state?.state?.settings?.backendUrl;
-        console.log('  Stored settings backendUrl:', settingsBackendUrl);
-        if (settingsBackendUrl) {
-          console.log('  🚨 OVERRIDING with stored settings!');
-          backendUrl = settingsBackendUrl;
+  if (envBackendUrl) {
+    // Environment variable is set, use it and ignore localStorage
+    backendUrl = envBackendUrl;
+    console.log('🔧 Using environment BACKEND_URL:', backendUrl);
+  } else {
+    // No environment variable, check localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('rigboss-ui-store');
+        if (stored) {
+          const state = JSON.parse(stored);
+          const settingsBackendUrl = state?.state?.settings?.backendUrl;
+          if (settingsBackendUrl) {
+            backendUrl = settingsBackendUrl;
+            console.log('🔧 Using stored BACKEND_URL:', backendUrl);
+          }
         }
+      } catch (error) {
+        console.warn('Failed to load backend URL from settings:', error);
       }
-    } catch (error) {
-      console.warn('Failed to load backend URL from settings:', error);
     }
   }
-
-  console.log('  Final backendUrl:', backendUrl);
 
   // Ensure URL doesn't end with slash
   backendUrl = backendUrl.replace(/\/$/, '');
