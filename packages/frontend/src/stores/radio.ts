@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { getConfig } from '../lib/config';
+
+// Helper function to make API calls to the correct backend
+const apiCall = (endpoint: string, options?: RequestInit) => {
+  const config = getConfig();
+  return fetch(`${config.apiUrl}${endpoint}`, options);
+};
 import type { RadioState, RadioMode, VFO, RadioInfo } from '@/types';
 
 interface RadioStore extends RadioState {
@@ -39,7 +46,7 @@ export const useRadioStore = create<RadioStore>()(
 
     connect: async () => {
       try {
-        const response = await fetch('/api/radio/connect', {
+        const response = await apiCall('/api/radio/connect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -75,7 +82,7 @@ export const useRadioStore = create<RadioStore>()(
 
     disconnect: async () => {
       try {
-        await fetch('/api/radio/disconnect', {
+        await apiCall('/api/radio/disconnect', {
           method: 'POST',
         });
       } catch (error) {
@@ -94,7 +101,7 @@ export const useRadioStore = create<RadioStore>()(
       set({ frequency }); // Optimistic update
       
       try {
-        const response = await fetch('/api/radio/frequency', {
+        const response = await apiCall('/api/radio/frequency', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ frequency }),

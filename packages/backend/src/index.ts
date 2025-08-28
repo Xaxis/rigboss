@@ -185,37 +185,38 @@ async function start() {
     `Backend listening on :${config.BACKEND_PORT}`
   );
 
-  // Try radio connection in background (don't block startup)
+  // Try radio connection and start polling
   if (useRealRadio) {
-    // Start with disconnected state
-    setInterval(() => {
-      radio.emit(EVENTS.RADIO_STATE, {
-        connected: false,
-        frequencyHz: 0,
-        mode: 'USB',
-        power: 0,
-        rigModel: 'IC-7300 (Connecting...)',
-      });
-    }, 2000);
+    app.log.info('🔄 Attempting to connect to radio...');
 
-    // Try to connect in background
-    setTimeout(async () => {
-      try {
-        await radio.connect('', 0);
-        app.log.info('✅ Radio connected! Starting real-time polling...');
+    try {
+      await radio.connect('', 0);
+      app.log.info('✅ Radio connected! Starting real-time polling...');
 
-        // Replace the mock interval with real polling
-        setInterval(async () => {
-          try {
-            await radio.refreshState();
-          } catch (error) {
-            app.log.error('Radio polling error:', error);
-          }
-        }, 1000);
-      } catch (error) {
-        app.log.error('❌ Radio connection failed, continuing with mock data');
-      }
-    }, 1000);
+      // Start real-time polling every 1 second
+      setInterval(async () => {
+        try {
+          await radio.refreshState();
+        } catch (error) {
+          app.log.error('Radio polling error:', error);
+        }
+      }, 1000);
+
+    } catch (error) {
+      app.log.error('❌ Radio connection failed:', error);
+      app.log.info('📡 Starting with disconnected state, will retry...');
+
+      // Emit disconnected state and keep trying to connect
+      setInterval(() => {
+        radio.emit(EVENTS.RADIO_STATE, {
+          connected: false,
+          frequencyHz: 0,
+          mode: 'USB',
+          power: 0,
+          rigModel: 'IC-7300 (Disconnected)',
+        });
+      }, 2000);
+    }
   } else {
     // Mock mode with changing data
     setInterval(() => {
