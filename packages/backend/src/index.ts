@@ -40,12 +40,7 @@ async function main() {
     uptimeSec: Math.floor(process.uptime()),
     services: ['radio'],
     rigctld: { host: cfg.RIGCTLD_HOST, port: cfg.RIGCTLD_PORT },
-    metrics: {
-      // Room for future queue metrics; keep minimal now
-      connected: true,
-    },
-    metrics: () => (radio as any).getMetrics ? (radio as any).getMetrics() : undefined,
-
+    metrics: (radio as any).getMetrics ? (radio as any).getMetrics() : undefined,
   }));
 
   const io = new IOServer(fastify.server, {

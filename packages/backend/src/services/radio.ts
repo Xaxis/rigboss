@@ -17,6 +17,13 @@ export class RadioService extends EventEmitter {
     return { ...this.state };
   }
 
+  // Expose minimal metrics via health
+  getMetrics() {
+    return {
+      connected: this.state.connected,
+    };
+  }
+
   private emitState() {
     const state = this.getState();
     this.emit(EVENTS.RADIO_STATE, state);

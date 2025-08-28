@@ -76,8 +76,6 @@ class PersistentRigctldClient {
 
   private wireSocket(s: net.Socket) {
     s.on('data', (buf) => this.onData(buf));
-    // On close, try to reconnect in the background
-
     s.on('error', (err) => this.onSocketError(err));
     s.on('close', () => this.onSocketClose());
     s.on('end', () => this.onSocketClose());
@@ -98,6 +96,7 @@ class PersistentRigctldClient {
     const cur = this.current;
     cur.lines.push(line);
     if (line.startsWith('RPRT ')) {
+      this.lastRprtAt = Date.now();
       this.finishCurrent();
       return;
     }
@@ -105,12 +104,14 @@ class PersistentRigctldClient {
       if (cur.idleTimer) clearTimeout(cur.idleTimer);
       cur.idleTimer = setTimeout(() => {
         // resolve without RPRT on idle
+        this.lastRprtAt = Date.now();
         this.finishCurrent(true);
       }, 200);
     }
   }
 
   private onSocketError(err: Error) {
+    this.lastError = err.message;
     if (this.current) {
       this.current.reject(err);
       this.clearCurrentTimers();
@@ -119,10 +120,14 @@ class PersistentRigctldClient {
     while (this.queue.length) {
       this.queue.shift()!.reject(err);
     }
+    this.reconnecting = true;
+    // Kick off background reconnect
+    void this.reconnect();
   }
 
   private onSocketClose() {
     this.connected = false;
+    this.reconnecting = true;
     if (this.current) {
       this.current.reject(new Error('rigctld socket closed'));
       this.clearCurrentTimers();
@@ -132,6 +137,8 @@ class PersistentRigctldClient {
       this.queue.shift()!.reject(new Error('rigctld socket closed'));
     }
     this.cleanupSocket();
+    // Kick off background reconnect
+    void this.reconnect();
   }
 
   private cleanupSocket() {
@@ -152,7 +159,7 @@ class PersistentRigctldClient {
     if (this.current || this.queue.length === 0) return;
     const next = this.queue.shift()!;
     // Initialize new current
-    this.current = { ...next, lines: [] } as any;
+    this.current = { ...next, lines: [], startedAt: Date.now() } as any;
     const cur = this.current!;
     // hard timeout
     cur.hardTimer = setTimeout(() => {
