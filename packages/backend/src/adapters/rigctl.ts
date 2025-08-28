@@ -19,7 +19,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       rigModel: options.rigModel || 3085, // Default to IC-7300
       rigPort: options.rigPort || '/dev/ttyUSB0',
       rigSpeed: options.rigSpeed || 19200,
-      timeout: options.timeout || 15000, // Increased timeout for IC-7300
+      timeout: options.timeout || 5000, // 5 second timeout
     };
   }
 
@@ -138,7 +138,11 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       ];
 
       console.log(`🔧 Executing: rigctl ${rigctlArgs.join(' ')}`);
-      const process = spawn('rigctl', rigctlArgs);
+      const process = spawn('rigctl', rigctlArgs, {
+        env: { ...process.env, PATH: process.env.PATH },
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false,
+      });
       let stdout = '';
       let stderr = '';
 
@@ -148,11 +152,15 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       }, this.options.timeout);
 
       process.stdout.on('data', (data) => {
-        stdout += data.toString();
+        const output = data.toString();
+        console.log(`📤 rigctl stdout: ${output.trim()}`);
+        stdout += output;
       });
 
       process.stderr.on('data', (data) => {
-        stderr += data.toString();
+        const error = data.toString();
+        console.log(`📤 rigctl stderr: ${error.trim()}`);
+        stderr += error;
       });
 
       process.on('close', (code) => {
