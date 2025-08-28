@@ -200,14 +200,14 @@ async function start() {
           }
         });
 
-        socket.on("radio:setFrequency", async (payload: any, cb?: (res: any) => void) => {
+        socket.on("radio:setFrequency", async (payload: any, cb?: (err: any, res?: any) => void) => {
           try {
             const hz = Number(payload?.frequency);
             if (!Number.isFinite(hz) || hz <= 0) throw new Error('invalid frequency');
             await radio.setFrequency(hz);
             cb?.(null, { ok: true });
           } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'setFrequency failed' });
+            cb?.(e?.message || 'setFrequency failed');
           }
         });
 
