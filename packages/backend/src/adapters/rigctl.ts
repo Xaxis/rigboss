@@ -138,7 +138,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       ];
 
       console.log(`🔧 Executing: rigctl ${rigctlArgs.join(' ')}`);
-      const process = spawn('rigctl', rigctlArgs, {
+      const childProcess = spawn('rigctl', rigctlArgs, {
         env: { ...process.env, PATH: process.env.PATH },
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: false,
@@ -147,23 +147,23 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       let stderr = '';
 
       const timeout = setTimeout(() => {
-        process.kill();
+        childProcess.kill();
         reject(new Error(`Command timeout: rigctl ${rigctlArgs.join(' ')}`));
       }, this.options.timeout);
 
-      process.stdout.on('data', (data) => {
+      childProcess.stdout.on('data', (data) => {
         const output = data.toString();
         console.log(`📤 rigctl stdout: ${output.trim()}`);
         stdout += output;
       });
 
-      process.stderr.on('data', (data) => {
+      childProcess.stderr.on('data', (data) => {
         const error = data.toString();
         console.log(`📤 rigctl stderr: ${error.trim()}`);
         stderr += error;
       });
 
-      process.on('close', (code) => {
+      childProcess.on('close', (code) => {
         clearTimeout(timeout);
         if (code === 0) {
           resolve(stdout);
@@ -172,7 +172,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
         }
       });
 
-      process.on('error', (error) => {
+      childProcess.on('error', (error) => {
         clearTimeout(timeout);
         reject(new Error(`Failed to spawn rigctl: ${error.message}`));
       });
