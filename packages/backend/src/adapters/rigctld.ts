@@ -106,31 +106,38 @@ export class RigctldAdapter implements RigctlAdapter {
     await this.sendCommand(`L RFPOWER ${powerLevel}`);
   }
 
+  async getPTT(): Promise<boolean> {
+    const res = await this.sendCommand('t');
+    return res.trim() === '1';
+  }
+
+  async setPtt(ptt: boolean): Promise<void> {
+    await this.sendCommand(`T ${ptt ? 1 : 0}`);
+  }
+
   async getState(): Promise<Partial<RadioState>> {
     try {
-      const [frequency, modeInfo, power] = await Promise.all([
+      const [frequency, modeInfo, power, ptt] = await Promise.all([
         this.getFrequency(),
         this.getMode(),
         this.getPower(),
+        this.getPTT().catch(() => false),
       ]);
 
       const state = {
         connected: this.connected,
         frequencyHz: frequency,
         mode: modeInfo.mode as any,
+        bandwidthHz: modeInfo.bandwidth,
         power: power,
+        ptt,
         rigModel: 'IC-7300',
       };
 
       return state;
     } catch (error) {
-      console.error('❌ Failed to get radio state:', error);
       return {
         connected: false,
-        frequencyHz: 0,
-        mode: 'USB',
-        power: 0,
-        rigModel: 'IC-7300 (Error)',
       };
     }
   }

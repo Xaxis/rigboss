@@ -219,10 +219,12 @@ export const useRadioStore = create<RadioStore>()(
     updateFromBackend: (data: Partial<RadioState>) => {
       // Map backend fields to store
       const mapped: Partial<RadioState> = {
-        connected: data.connected ?? false,
+        connected: data.connected ?? get().connected,
         frequency: (data as any).frequency ?? (data as any).frequencyHz ?? get().frequency,
         mode: (data as any).mode ?? get().mode,
+        bandwidthHz: typeof (data as any).bandwidthHz === 'number' ? (data as any).bandwidthHz : get().bandwidthHz,
         power: typeof (data as any).power === 'number' ? (data as any).power : get().power,
+        ptt: typeof (data as any).ptt === 'boolean' ? (data as any).ptt : get().ptt,
         model: (data as any).rigModel ?? get().model,
       };
       set((state) => ({ ...state, ...mapped }));
