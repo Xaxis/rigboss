@@ -30,8 +30,10 @@ async function start() {
 
   // CORS for HTTP
   await app.register(cors, {
-    origin: config.CORS_ORIGIN === "*" ? true : (config.CORS_ORIGIN ? config.CORS_ORIGIN.split(",") : true),
+    origin: true, // Allow all origins for now
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   const registry = new ServiceRegistry();
@@ -163,8 +165,9 @@ async function start() {
   const io = new IOServer(app.server, {
     path: "/socket.io",
     cors: {
-      origin: config.CORS_ORIGIN === "*" ? true : (config.CORS_ORIGIN ? config.CORS_ORIGIN.split(",") : true),
+      origin: true, // Allow all origins
       credentials: true,
+      methods: ['GET', 'POST'],
     },
   });
 
@@ -215,17 +218,20 @@ async function start() {
 
     } catch (error) {
       app.log.error('❌ Radio connection failed:', error);
+      app.log.error('❌ Error details:', error.message);
       app.log.info('📡 Starting with disconnected state, will retry...');
 
       // Emit disconnected state and keep trying to connect
       setInterval(() => {
-        radio.emit(EVENTS.RADIO_STATE, {
+        const state = {
           connected: false,
           frequencyHz: 0,
           mode: 'USB',
           power: 0,
           rigModel: 'IC-7300 (Disconnected)',
-        });
+        };
+        console.log('📡 Emitting disconnected radio state:', state);
+        radio.emit(EVENTS.RADIO_STATE, state);
       }, 2000);
     }
   } else {
