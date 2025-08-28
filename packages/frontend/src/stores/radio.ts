@@ -47,7 +47,8 @@ export const useRadioStore = create<RadioStore>()(
     connect: async () => {
       const { getWebSocketService } = await import('../services/websocket');
       const ws = getWebSocketService();
-      await ws.emitWithAck('radio:connect', { host: 'localhost', port: 4532 });
+      // Let backend choose correct default (127.0.0.1:4532 on Pi)
+      await ws.emitWithAck('radio:connect');
       set({ connected: true });
     },
 
