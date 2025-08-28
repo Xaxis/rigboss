@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Square, Mic, TestTube, Volume2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CollapsibleInfo, InfoItem } from '@/components/ui/collapsible-info';
 import { useAudioRecording, useAudioPlaying, useAudioConnected, useAudioStore } from '@/stores/audio';
 import { toast } from '@/stores/ui';
 import { cn } from '@/lib/utils';
@@ -110,38 +111,24 @@ export function AudioControls() {
           </div>
         </div>
 
-        {/* Status Indicators */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-3 bg-muted rounded-lg">
-          <div className="text-center">
-            <div className="text-xs text-muted-foreground">Connection</div>
-            <div className={cn(
-              "font-medium text-sm",
-              connected ? "text-green-600" : "text-red-600"
-            )}>
-              {connected ? 'Active' : 'Inactive'}
-            </div>
-          </div>
-          
-          <div className="text-center">
-            <div className="text-xs text-muted-foreground">Recording</div>
-            <div className={cn(
-              "font-medium text-sm",
-              recording ? "text-blue-600" : "text-muted-foreground"
-            )}>
-              {recording ? 'Recording' : 'Standby'}
-            </div>
-          </div>
-          
-          <div className="text-center">
-            <div className="text-xs text-muted-foreground">Playback</div>
-            <div className={cn(
-              "font-medium text-sm",
-              playing ? "text-purple-600" : "text-muted-foreground"
-            )}>
-              {playing ? 'Playing' : 'Ready'}
-            </div>
-          </div>
-        </div>
+        {/* Status Information */}
+        <CollapsibleInfo title="Audio Status" defaultOpen={false}>
+          <InfoItem
+            label="Connection"
+            value={connected ? 'Active' : 'Inactive'}
+            valueClassName={connected ? "text-green-600" : "text-red-600"}
+          />
+          <InfoItem
+            label="Recording"
+            value={recording ? 'Recording' : 'Standby'}
+            valueClassName={recording ? "text-blue-600" : "text-muted-foreground"}
+          />
+          <InfoItem
+            label="Playback"
+            value={playing ? 'Playing' : 'Ready'}
+            valueClassName={playing ? "text-purple-600" : "text-muted-foreground"}
+          />
+        </CollapsibleInfo>
 
         {/* Recording Status */}
         {recording && (

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Info, Radio } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CollapsibleInfo, InfoItem } from '@/components/ui/collapsible-info';
 import { useRadioModel, useRadioSerialNumber, useRadioFirmwareVersion, useRadioConnected } from '@/stores/radio';
 import { cn } from '@/lib/utils';
 
@@ -47,20 +48,21 @@ export function RadioInfo() {
 
             {/* Additional Info */}
             <div className="pt-2 border-t border-border">
-              <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Connection</span>
-                  <span className="text-green-600 font-medium">Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Protocol</span>
-                  <span className="font-medium text-foreground">Hamlib/rigctl</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Interface</span>
-                  <span className="font-medium text-foreground">USB/Serial</span>
-                </div>
-              </div>
+              <CollapsibleInfo title="Connection Details" defaultOpen={false}>
+                <InfoItem
+                  label="Connection"
+                  value="Active"
+                  valueClassName="text-green-600"
+                />
+                <InfoItem
+                  label="Protocol"
+                  value="Hamlib/rigctl"
+                />
+                <InfoItem
+                  label="Interface"
+                  value="USB/Serial"
+                />
+              </CollapsibleInfo>
             </div>
           </>
         ) : (
@@ -77,9 +79,8 @@ export function RadioInfo() {
 
         {/* Radio Capabilities (when connected) */}
         {connected && model && (
-          <div className="p-3 bg-muted rounded-lg">
-            <div className="text-sm font-medium mb-2">Capabilities</div>
-            <div className="space-y-1 text-xs text-muted-foreground">
+          <CollapsibleInfo title="Radio Capabilities" defaultOpen={false}>
+            <div className="space-y-1">
               <div>• Frequency Control</div>
               <div>• Mode Selection</div>
               <div>• Power Control</div>
@@ -93,7 +94,7 @@ export function RadioInfo() {
                 </>
               )}
             </div>
-          </div>
+          </CollapsibleInfo>
         )}
       </CardContent>
     </Card>

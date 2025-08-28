@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { CollapsibleInfo, InfoItem } from '@/components/ui/collapsible-info';
 import { useSpectrumSettings, useSpectrumSource, useSpectrumMode, useSpectrumStore } from '@/stores/spectrum';
 import { formatFrequency } from '@/lib/utils';
 import type { SpectrumSource, SpectrumMode } from '@/types';
@@ -241,16 +242,18 @@ export function SpectrumControls() {
         </div>
 
         {/* Status Info */}
-        <div className="p-3 bg-muted rounded-lg">
-          <div className="text-sm font-medium mb-2">Status</div>
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <div>Source: <span className="font-medium text-foreground">{source}</span></div>
-            <div>Mode: <span className="font-medium text-foreground">{mode}</span></div>
-            <div>Resolution: <span className="font-medium text-foreground">
-              {(settings.spanHz / settings.fftSize / 1000).toFixed(1)} kHz/bin
-            </span></div>
-          </div>
-        </div>
+        <CollapsibleInfo title="Spectrum Status" defaultOpen={false}>
+          <InfoItem label="Source" value={source} />
+          <InfoItem label="Mode" value={mode} />
+          <InfoItem
+            label="Resolution"
+            value={`${(settings.spanHz / settings.fftSize / 1000).toFixed(1)} kHz/bin`}
+          />
+          <InfoItem
+            label="Update Rate"
+            value="~30 FPS"
+          />
+        </CollapsibleInfo>
       </CardContent>
     </Card>
   );

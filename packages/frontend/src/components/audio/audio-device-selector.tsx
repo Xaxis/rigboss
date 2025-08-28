@@ -72,16 +72,13 @@ export function AudioDeviceSelector({ type }: AudioDeviceSelectorProps) {
               ) : (
                 devices.map((device) => (
                   <SelectItem key={device.id} value={device.id || `device-${Math.random()}`}>
-                    <div className="flex items-center gap-2">
-                      {getDeviceIcon()}
-                      <div>
-                        <div className="font-medium">{getDeviceLabel(device)}</div>
-                        {device.groupId && (
-                          <div className="text-xs text-muted-foreground">
-                            Group: {device.groupId.slice(0, 8)}
-                          </div>
-                        )}
-                      </div>
+                    <div>
+                      <div className="font-medium">{getDeviceLabel(device)}</div>
+                      {device.groupId && (
+                        <div className="text-xs text-muted-foreground">
+                          Group: {device.groupId.slice(0, 8)}
+                        </div>
+                      )}
                     </div>
                   </SelectItem>
                 ))

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CollapsibleInfo, InfoItem } from '@/components/ui/collapsible-info';
 import { cn } from '@/lib/utils';
 
 export function AudioProcessing() {
@@ -155,49 +156,56 @@ export function AudioProcessing() {
         </div>
 
         {/* Processing Status */}
-        <div className="p-3 bg-muted rounded-lg">
-          <div className="text-sm font-medium mb-2">Processing Status</div>
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <div>Mode: <span className="font-medium text-foreground">
-              {processingModes.find(m => m.value === processingMode)?.label}
-            </span></div>
-            <div>Noise Reduction: <span className={cn(
-              "font-medium",
-              noiseReduction ? "text-green-600" : "text-muted-foreground"
-            )}>
-              {noiseReduction ? 'Enabled' : 'Disabled'}
-            </span></div>
-            <div>Echo Cancel: <span className={cn(
-              "font-medium",
-              echoCancellation ? "text-green-600" : "text-muted-foreground"
-            )}>
-              {echoCancellation ? 'Enabled' : 'Disabled'}
-            </span></div>
-            <div>Auto Gain: <span className={cn(
-              "font-medium",
-              autoGainControl ? "text-green-600" : "text-muted-foreground"
-            )}>
-              {autoGainControl ? 'Enabled' : 'Disabled'}
-            </span></div>
-            <div>Compression: <span className="font-medium text-foreground">
-              {compressionLevel}%
-            </span></div>
-          </div>
-        </div>
+        <CollapsibleInfo title="Processing Status" defaultOpen={false}>
+          <InfoItem
+            label="Mode"
+            value={processingModes.find(m => m.value === processingMode)?.label || 'Unknown'}
+          />
+          <InfoItem
+            label="Noise Reduction"
+            value={noiseReduction ? 'Enabled' : 'Disabled'}
+            valueClassName={noiseReduction ? "text-green-600" : "text-muted-foreground"}
+          />
+          <InfoItem
+            label="Echo Cancel"
+            value={echoCancellation ? 'Enabled' : 'Disabled'}
+            valueClassName={echoCancellation ? "text-green-600" : "text-muted-foreground"}
+          />
+          <InfoItem
+            label="Auto Gain"
+            value={autoGainControl ? 'Enabled' : 'Disabled'}
+            valueClassName={autoGainControl ? "text-green-600" : "text-muted-foreground"}
+          />
+          <InfoItem
+            label="Compression"
+            value={`${compressionLevel}%`}
+          />
+        </CollapsibleInfo>
 
         {/* Performance Impact */}
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg dark:bg-blue-900 dark:border-blue-800">
-          <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
-            Performance Impact
-          </div>
-          <div className="text-xs text-blue-600 dark:text-blue-300">
-            Current settings: {
-              noiseReduction || echoCancellation || equalizerEnabled 
-                ? 'Medium CPU usage' 
-                : 'Low CPU usage'
+        <CollapsibleInfo title="Performance Impact" defaultOpen={false}>
+          <InfoItem
+            label="CPU Usage"
+            value={
+              noiseReduction || echoCancellation || equalizerEnabled
+                ? 'Medium'
+                : 'Low'
             }
-          </div>
-        </div>
+            valueClassName={
+              noiseReduction || echoCancellation || equalizerEnabled
+                ? 'text-yellow-600'
+                : 'text-green-600'
+            }
+          />
+          <InfoItem
+            label="Memory Usage"
+            value="~8 MB"
+          />
+          <InfoItem
+            label="Latency"
+            value="< 5ms"
+          />
+        </CollapsibleInfo>
 
         {/* Processing Tips */}
         <div className="text-xs text-muted-foreground space-y-1">
