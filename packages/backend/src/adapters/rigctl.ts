@@ -26,10 +26,14 @@ export class RigctlCommandAdapter implements RigctlAdapter {
   async connect(_host: string, _port: number): Promise<void> {
     // Test connection by getting frequency
     try {
-      await this.executeCommand('f');
+      console.log(`🔧 Testing rigctl connection with model ${this.options.rigModel} on port ${this.options.rigPort}`);
+      const freq = await this.executeCommand('f');
+      console.log(`🔧 Radio responded with frequency: ${freq.trim()} Hz`);
       this.connected = true;
+      console.log('✅ Radio connection successful');
     } catch (error) {
       this.connected = false;
+      console.error(`❌ Radio connection failed:`, error);
       throw new Error(`Failed to connect to radio: ${error}`);
     }
   }
@@ -131,6 +135,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
         ...args
       ];
 
+      console.log(`🔧 Executing: rigctl ${rigctlArgs.join(' ')}`);
       const process = spawn('rigctl', rigctlArgs);
       let stdout = '';
       let stderr = '';

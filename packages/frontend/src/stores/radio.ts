@@ -26,8 +26,8 @@ const initialState: RadioState = {
   split: false,
   ptt: false,
   tuning: false,
-  swr: 1.2,
-  signalStrength: -85,
+  swr: 0, // Will be updated from backend
+  signalStrength: 0, // Will be updated from backend
   model: 'Connecting...',
   serialNumber: '',
   firmwareVersion: '',

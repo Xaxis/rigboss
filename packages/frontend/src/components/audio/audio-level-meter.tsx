@@ -22,34 +22,13 @@ export function AudioLevelMeter({ type }: AudioLevelMeterProps) {
   const level = type === 'input' ? inputLevel : outputLevel;
   const setLevel = type === 'input' ? setInputLevel : setOutputLevel;
 
-  // Simulate real-time audio level monitoring
+  // Real-time audio level monitoring from backend
   useEffect(() => {
-    const updateLevels = () => {
-      // Simulate audio level fluctuation
-      const baseLevel = level / 100;
-      const variation = (Math.random() - 0.5) * 0.3;
-      const newLevel = Math.max(0, Math.min(1, baseLevel + variation));
-      
-      setRealTimeLevel(newLevel * 100);
-      
-      // Update peak hold
-      setPeakLevel(prev => Math.max(prev * 0.95, newLevel * 100));
-      
-      animationRef.current = requestAnimationFrame(updateLevels);
-    };
+    // Use actual level from props (comes from backend audio data)
+    setRealTimeLevel(level);
 
-    if (level > 0) {
-      updateLevels();
-    } else {
-      setRealTimeLevel(0);
-      setPeakLevel(0);
-    }
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
+    // Update peak hold
+    setPeakLevel(prev => Math.max(prev * 0.95, level));
   }, [level]);
 
   const handleLevelChange = (value: number[]) => {

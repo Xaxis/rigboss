@@ -186,19 +186,32 @@ async function start() {
   // Auto-connect to radio and start polling
   if (useRealRadio) {
     try {
-      await radio.connect('localhost', 4532); // Connect to rigctld or direct
+      // Try direct rigctl connection first (no rigctld daemon)
+      await radio.connect('', 0); // RigctlCommandAdapter doesn't use host/port
       app.log.info('Radio connected, starting polling...');
 
-      // Poll radio state every 1 second
+      // Poll radio state every 2 seconds
       setInterval(async () => {
         try {
           await radio.refreshState();
         } catch (error) {
           app.log.error('Radio polling error:', error);
         }
-      }, 1000);
+      }, 2000);
     } catch (error) {
       app.log.error('Failed to connect to radio:', error);
+      app.log.info('Continuing with mock data...');
+
+      // Fall back to mock data if radio connection fails
+      setInterval(() => {
+        radio.emit(EVENTS.RADIO_STATE, {
+          connected: false,
+          frequencyHz: 14200000,
+          mode: 'USB',
+          power: 0,
+          rigModel: 'IC-7300 (Disconnected)',
+        });
+      }, 2000);
     }
   } else {
     // For mock mode, simulate some data changes
