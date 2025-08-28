@@ -1,169 +1,227 @@
-import { Socket } from 'net';
-import { RigctlAdapter, RadioState } from '../types/radio';
+import net from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
 
-export class RigctldAdapter implements RigctlAdapter {
-  private socket: Socket | null = null;
+function parseRPRT(lines: string[]): { ok: boolean; code: number } {
+  const last = lines.find((l) => l.startsWith('RPRT ')) || '';
+  const code = Number(last.replace('RPRT ', '').trim());
+  return { ok: code === 0, code };
+}
+
+async function sendCommand(host: string, port: number, cmd: string, timeoutMs = 5000): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    const chunks: string[] = [];
+    let resolved = false;
+
+    const cleanup = (err?: Error) => {
+      if (!resolved) {
+        resolved = true;
+        if (err) reject(err);
+      }
+      socket.destroy();
+    };
+
+    const timer = setTimeout(() => cleanup(new Error(`rigctld timeout for command: ${cmd}`)), timeoutMs);
+
+    socket.setNoDelay(true);
+    socket.connect(port, host, () => {
+      socket.write(cmd + '\n');
+    });
+
+    socket.on('data', (buf) => {
+      const text = buf.toString('utf8');
+      chunks.push(text);
+      if (text.includes('RPRT ')) {
+        clearTimeout(timer);
+        cleanup();
+        const all = chunks.join('');
+        const lines = all.split(/\r?\n/).filter((l) => l.length > 0);
+        resolve(lines);
+      }
+    });
+
+    socket.on('error', (err) => {
+      clearTimeout(timer);
+      cleanup(err);
+    });
+
+    socket.on('close', () => {
+      // ignore
+    });
+  });
+}
+
+export class RigctldAdapter {
+  private host: string;
+  private port: number;
   private connected = false;
-  private host = 'localhost';
-  private port = 4532;
 
-  async connect(host: string, port: number): Promise<void> {
-    this.host = host || 'localhost';
-    this.port = port || 4532;
+  constructor(host: string, port: number) {
+    this.host = host;
+    this.port = port;
+  }
 
-    // Validate by issuing a simple command; mark connected only on success
-    await this.sendCommand('f');
-    this.connected = true;
+  async connect(host?: string, port?: number): Promise<boolean> {
+    if (host) this.host = host;
+    if (port) this.port = port;
+    try {
+      // Probe with a simple read command
+      const lines = await sendCommand(this.host, this.port, 'f');
+      const { ok } = parseRPRT(lines);
+      this.connected = ok;
+      return ok;
+    } catch (e) {
+      this.connected = false;
+      return false;
+    }
   }
 
   async disconnect(): Promise<void> {
-    if (this.socket) {
-      this.socket.destroy();
-      this.socket = null;
-    }
     this.connected = false;
   }
 
-  private async sendCommand(command: string): Promise<string> {
-    // Use a fresh connection per command to avoid interleaving responses.
-    return new Promise((resolve, reject) => {
-      const sock = new Socket();
-      let buf = '';
-      let finished = false;
-      const timeout = setTimeout(() => {
-        if (!finished) {
-          finished = true;
-          try { sock.destroy(); } catch {}
-          reject(new Error(`Command timeout: ${command}`));
-        }
-      }, 5000);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        sock.removeAllListeners();
-        try { sock.end(); } catch {}
-        try { sock.destroy(); } catch {}
-      };
-
-      sock.on('error', (err) => {
-        if (finished) return;
-        finished = true;
-        cleanup();
-        reject(err);
-      });
-
-      sock.on('data', (data: Buffer) => {
-        if (finished) return;
-        buf += data.toString();
-        // rigctld terminates responses with a line starting with RPRT
-        const lines = buf.split(/\r?\n/);
-        const rprtIdx = lines.findIndex(l => /^RPRT\s/.test(l));
-        if (rprtIdx !== -1) {
-          const payloadLines = lines.slice(0, rprtIdx).filter(l => l.length > 0);
-          finished = true;
-          cleanup();
-          resolve(payloadLines.join('\n'));
-        }
-      });
-
-      sock.connect(this.port, this.host, () => {
-        sock.write(command + '\n');
-      });
-    });
+  isConnected(): boolean {
+    return this.connected;
   }
 
-  async getFrequency(): Promise<number> {
-    const response = await this.sendCommand('f');
-    const freq = parseInt(response.trim());
-    return freq;
+  async getFrequency(): Promise<number | undefined> {
+    const lines = await sendCommand(this.host, this.port, 'f');
+    const { ok } = parseRPRT(lines);
+    if (!ok) return undefined;
+    const freqLine = lines[0] ?? '';
+    const hz = Number(freqLine.trim());
+    return Number.isFinite(hz) ? hz : undefined;
   }
 
-  async setFrequency(frequency: number): Promise<void> {
-    await this.sendCommand(`F ${frequency}`);
+  async setFrequency(hz: number): Promise<void> {
+    const lines = await sendCommand(this.host, this.port, `F ${hz}`);
+    const { ok } = parseRPRT(lines);
+    if (!ok) throw new Error('Failed to set frequency');
   }
 
-  async getMode(): Promise<{ mode: string; bandwidth: number }> {
-    const response = await this.sendCommand('m');
-    const lines = response.trim().split('\n');
-    const mode = lines[0] || 'USB';
-    const bandwidth = lines.length > 1 ? parseInt(lines[1]) : 2400;
-    return { mode, bandwidth };
+  async getMode(): Promise<{ mode?: string; bandwidthHz?: number }> {
+    const lines = await sendCommand(this.host, this.port, 'm');
+    const { ok } = parseRPRT(lines);
+    if (!ok) return {};
+    const mode = lines[0]?.trim();
+    const bw = Number(lines[1]);
+    const bandwidthHz = Number.isFinite(bw) ? bw : undefined;
+    return { mode, bandwidthHz };
   }
 
-  async setMode(mode: string, bandwidth?: number): Promise<void> {
-    const bw = bandwidth || 2400;
-    await this.sendCommand(`M ${mode} ${bw}`);
+  async setMode(mode: string, bandwidthHz?: number): Promise<void> {
+    const cmd = bandwidthHz ? `M ${mode} ${bandwidthHz}` : `M ${mode}`;
+    const lines = await sendCommand(this.host, this.port, cmd);
+    const { ok } = parseRPRT(lines);
+    if (!ok) throw new Error('Failed to set mode');
   }
 
-  async getPower(): Promise<number> {
-    const response = await this.sendCommand('l RFPOWER');
-    const power = parseFloat(response.trim()) * 100; // Convert 0.0-1.0 to 0-100
-    return Math.round(Math.max(0, Math.min(100, power))); // Clamp to 0-100
+  async getPower(): Promise<number | undefined> {
+    const lines = await sendCommand(this.host, this.port, 'l RFPOWER');
+    const { ok } = parseRPRT(lines);
+    if (!ok) return undefined;
+    const v = Number(lines[0]);
+    if (!Number.isFinite(v)) return undefined;
+    const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
+    return pct;
   }
 
-  async setPower(power: number): Promise<void> {
-    const powerLevel = power / 100; // Convert 0-100 to 0.0-1.0
-    await this.sendCommand(`L RFPOWER ${powerLevel}`);
+  async setPower(powerPercent: number): Promise<void> {
+    const frac = Math.max(0, Math.min(1, powerPercent / 100));
+    const lines = await sendCommand(this.host, this.port, `L RFPOWER ${frac}`);
+    const { ok } = parseRPRT(lines);
+    if (!ok) throw new Error('Failed to set power');
   }
 
-  async getPTT(): Promise<boolean> {
-    const res = await this.sendCommand('t');
-    return res.trim() === '1';
+  async getPTT(): Promise<boolean | undefined> {
+    const lines = await sendCommand(this.host, this.port, 't');
+    const { ok } = parseRPRT(lines);
+    if (!ok) return undefined;
+    const v = lines[0]?.trim();
+    return v === '1';
   }
 
-  async setPtt(ptt: boolean): Promise<void> {
-    await this.sendCommand(`T ${ptt ? 1 : 0}`);
-  }
-
-  async getSignalStrength(): Promise<number | undefined> {
-    // Try candidates for S-meter; values may be 0.0..1.0
-    for (const token of ['STRENGTH', 'SMETER']) {
-      try {
-        const res = await this.sendCommand(`l ${token}`);
-        const v = parseFloat(res.trim());
-        if (isFinite(v)) {
-          // Map 0..1 -> -120..-40 dBm
-          return Math.round(-120 + v * 80);
-        }
-      } catch {}
-    }
-    return undefined;
+  async setPTT(ptt: boolean): Promise<void> {
+    const lines = await sendCommand(this.host, this.port, `T ${ptt ? 1 : 0}`);
+    const { ok } = parseRPRT(lines);
+    if (!ok) throw new Error('Failed to set PTT');
   }
 
   async getSWR(): Promise<number | undefined> {
     try {
-      const res = await this.sendCommand('l SWR');
-      const v = parseFloat(res.trim());
-      if (isFinite(v) && v > 0) return parseFloat(v.toFixed(2));
-    } catch {}
-    return undefined;
+      const lines = await sendCommand(this.host, this.port, 'l SWR');
+      const { ok } = parseRPRT(lines);
+      if (!ok) return undefined;
+      const v = Number(lines[0]);
+      return Number.isFinite(v) ? v : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
-  async getState(): Promise<Partial<RadioState>> {
+  async getSignalStrength(): Promise<number | undefined> {
     try {
-      const [frequency, modeInfo, power, ptt, swr, signal] = await Promise.all([
+      const lines = await sendCommand(this.host, this.port, 'l STRENGTH');
+      const { ok } = parseRPRT(lines);
+      if (!ok) return undefined;
+      const v = Number(lines[0]);
+      if (!Number.isFinite(v)) return undefined;
+      // Map 0..1 to approx -127..-20 dBm (rough heuristic)
+      return -127 + v * (107);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async getRigModel(): Promise<string | undefined> {
+    try {
+      const lines = await sendCommand(this.host, this.port, 'v');
+      const { ok } = parseRPRT(lines);
+      if (!ok) return undefined;
+      return lines[0]?.trim();
+    } catch {
+      return undefined;
+    }
+  }
+
+  async getState(): Promise<{
+    connected: boolean;
+    frequencyHz?: number;
+    mode?: string;
+    bandwidthHz?: number;
+    power?: number;
+    ptt?: boolean;
+    rigModel?: string;
+    swr?: number;
+    signalStrength?: number;
+  }> {
+    if (!this.connected) {
+      return { connected: false };
+    }
+    try {
+      const [frequencyHz, { mode, bandwidthHz }, power, ptt, rigModel, swr, signalStrength] = await Promise.all([
         this.getFrequency(),
         this.getMode(),
         this.getPower(),
-        this.getPTT().catch(() => false),
-        this.getSWR().catch(() => undefined),
-        this.getSignalStrength().catch(() => undefined),
+        this.getPTT(),
+        this.getRigModel(),
+        this.getSWR(),
+        this.getSignalStrength(),
       ]);
-
-      const state: Partial<RadioState> = {
-        connected: this.connected,
-        frequencyHz: frequency,
-        mode: modeInfo.mode as any,
-        bandwidthHz: modeInfo.bandwidth,
+      return {
+        connected: true,
+        frequencyHz,
+        mode,
+        bandwidthHz,
         power,
         ptt,
-        rigModel: 'IC-7300',
+        rigModel,
+        swr,
+        signalStrength,
       };
-      if (typeof swr === 'number') (state as any).swr = swr;
-      if (typeof signal === 'number') (state as any).signalStrength = signal;
-      return state;
-    } catch (error) {
+    } catch (e) {
       return { connected: false };
     }
   }
 }
+

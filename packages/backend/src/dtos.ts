@@ -1,63 +1,48 @@
-import { z } from "zod";
-
-export const RadioModeEnum = z.enum([
-  "LSB",
-  "USB",
-  "AM",
-  "CW",
-  "RTTY",
-  "FM",
-  "WFM",
-  "CWR",
-  "DIGL",
-  "DIGU",
-  "PKTLSB",
-  "PKTUSB",
-  "PKTFM",
-  "ECSSLSB",
-  "ECSSUSB",
-  "FAX",
-  "SAM",
-  "SAL",
-  "SAH",
-  "DSB",
-  "CWU",
-  "NONE",
-]);
-export type RadioMode = z.infer<typeof RadioModeEnum>;
+import { z } from 'zod';
 
 export const RadioStateSchema = z.object({
   connected: z.boolean(),
-  rigModel: z.string().optional(),
-  frequencyHz: z.number().optional(),
-  mode: RadioModeEnum.optional(),
-  bandwidthHz: z.number().optional(),
-  power: z.number().optional(),
+  frequencyHz: z.number().nonnegative().optional().default(0),
+  mode: z.string().optional().default(''),
+  bandwidthHz: z.number().int().positive().optional(),
+  power: z.number().min(0).max(100).optional(),
   ptt: z.boolean().optional(),
+  rigModel: z.string().optional(),
+  swr: z.number().nonnegative().optional(),
+  signalStrength: z.number().optional(),
 });
+
 export type RadioState = z.infer<typeof RadioStateSchema>;
 
-export const AudioStatusSchema = z.object({
-  started: z.boolean(),
-  mode: z.enum(["webrtc", "pcm", "none"]).default("none"),
+export const ConnectPayloadSchema = z.object({
+  host: z.string().ip().optional(),
+  port: z.number().int().positive().optional(),
 });
-export type AudioStatus = z.infer<typeof AudioStatusSchema>;
+export type ConnectPayload = z.infer<typeof ConnectPayloadSchema>;
 
-export const SpectrumSettingsSchema = z.object({
-  centerHz: z.number(),
-  spanHz: z.number(),
-  fftSize: z.number(),
-  averaging: z.number().min(1).max(10).default(1),
-  refLevel: z.number().default(0),
-  colorMap: z.string().default("viridis"),
+export const SetFrequencyPayloadSchema = z.object({
+  frequency: z.number().int().nonnegative(),
 });
-export type SpectrumSettings = z.infer<typeof SpectrumSettingsSchema>;
+export type SetFrequencyPayload = z.infer<typeof SetFrequencyPayloadSchema>;
 
-export const SpectrumFrameSchema = z.object({
-  timestamp: z.number(),
-  startHz: z.number(),
-  binSizeHz: z.number(),
-  db: z.array(z.number()),
+export const SetModePayloadSchema = z.object({
+  mode: z.string(),
+  bandwidthHz: z.number().int().positive().optional(),
 });
-export type SpectrumFrame = z.infer<typeof SpectrumFrameSchema>;
+export type SetModePayload = z.infer<typeof SetModePayloadSchema>;
+
+export const SetPowerPayloadSchema = z.object({
+  power: z.number().min(0).max(100),
+});
+export type SetPowerPayload = z.infer<typeof SetPowerPayloadSchema>;
+
+export const SetPTTPayloadSchema = z.object({
+  ptt: z.boolean(),
+});
+export type SetPTTPayload = z.infer<typeof SetPTTPayloadSchema>;
+
+export const TunePayloadSchema = z.object({
+  ms: z.number().int().min(100).max(5000).optional().default(1200),
+});
+export type TunePayload = z.infer<typeof TunePayloadSchema>;
 

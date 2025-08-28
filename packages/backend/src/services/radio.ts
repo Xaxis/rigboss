@@ -1,68 +1,99 @@
-import { EventEmitter } from "node:events";
-import type { RadioState, RadioMode } from "../dtos.js";
-import { EVENTS } from "../events.js";
-
-export interface RadioServiceOptions {
-  adapter: RigctlAdapter;
-}
-
-export interface RigctlAdapter {
-  connect(host: string, port: number): Promise<void>;
-  disconnect(): Promise<void>;
-  getState(): Promise<Partial<RadioState>>;
-  setFrequency(hz: number): Promise<void>;
-  setMode(mode: RadioMode, bandwidthHz?: number): Promise<void>;
-  setPower(percent: number): Promise<void>;
-  setPtt(ptt: boolean): Promise<void>;
-}
+import { EventEmitter } from 'node:events';
+import type { RadioState } from '../dtos.js';
+import { RigctldAdapter } from '../adapters/rigctld.js';
+import { EVENTS } from '../events.js';
 
 export class RadioService extends EventEmitter {
-  private state: RadioState = { connected: false };
-  constructor(private readonly opts: RadioServiceOptions) {
+  private state: RadioState = { connected: false, frequencyHz: 0, mode: '' };
+  private adapter: RigctldAdapter;
+  private pollTimer: NodeJS.Timeout | null = null;
+
+  constructor(adapter: RigctldAdapter) {
     super();
-  }
-
-  async connect(host: string, port: number) {
-    await this.opts.adapter.connect(host, port);
-    this.state.connected = true;
-    this.emit(EVENTS.CONNECTION_STATUS, { connected: true });
-    this.emit(EVENTS.RADIO_STATE, this.state);
-  }
-
-  async disconnect() {
-    await this.opts.adapter.disconnect();
-    this.state.connected = false;
-    this.emit(EVENTS.CONNECTION_STATUS, { connected: false });
-    this.emit(EVENTS.RADIO_STATE, this.state);
-  }
-
-  async refreshState() {
-    const partial = await this.opts.adapter.getState();
-    this.state = { ...this.state, ...partial };
-    this.emit(EVENTS.RADIO_STATE, this.state);
+    this.adapter = adapter;
   }
 
   getState(): RadioState {
-    return this.state;
+    return { ...this.state };
   }
 
-  async setFrequency(hz: number) {
-    await this.opts.adapter.setFrequency(hz);
+  private emitState() {
+    const state = this.getState();
+    this.emit(EVENTS.RADIO_STATE, state);
+    this.emit(EVENTS.CONNECTION_STATUS, { connected: state.connected });
+  }
+
+  async connect(host?: string, port?: number): Promise<boolean> {
+    const ok = await this.adapter.connect(host, port);
+    this.state.connected = ok;
+    this.emitState();
+    if (ok) this.startPolling();
+    return ok;
+  }
+
+  async disconnect(): Promise<void> {
+    this.stopPolling();
+    await this.adapter.disconnect();
+    this.state.connected = false;
+    this.emitState();
+  }
+
+  private startPolling() {
+    if (this.pollTimer) return;
+    this.pollTimer = setInterval(async () => {
+      try {
+        const snapshot = await this.adapter.getState();
+        this.state = { ...this.state, ...snapshot } as RadioState;
+        this.emitState();
+        if (!snapshot.connected) {
+          this.stopPolling();
+        }
+      } catch (e) {
+        // stop on error and mark disconnected; will be reconnected by bootstrap loop
+        this.state.connected = false;
+        this.emitState();
+        this.stopPolling();
+      }
+    }, 1000);
+  }
+
+  private stopPolling() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  async refreshState(): Promise<void> {
+    const snapshot = await this.adapter.getState();
+    this.state = { ...this.state, ...snapshot } as RadioState;
+    this.emitState();
+  }
+
+  async setFrequency(hz: number): Promise<void> {
+    await this.adapter.setFrequency(hz);
     await this.refreshState();
   }
 
-  async setMode(mode: RadioMode, bandwidthHz?: number) {
-    await this.opts.adapter.setMode(mode, bandwidthHz);
+  async setMode(mode: string, bandwidthHz?: number): Promise<void> {
+    await this.adapter.setMode(mode, bandwidthHz);
     await this.refreshState();
   }
 
-  async setPower(percent: number) {
-    await this.opts.adapter.setPower(percent);
+  async setPower(power: number): Promise<void> {
+    await this.adapter.setPower(power);
     await this.refreshState();
   }
 
-  async setPtt(ptt: boolean) {
-    await this.opts.adapter.setPtt(ptt);
+  async setPTT(ptt: boolean): Promise<void> {
+    await this.adapter.setPTT(ptt);
+    await this.refreshState();
+  }
+
+  async tune(ms = 1200): Promise<void> {
+    await this.adapter.setPTT(true);
+    await new Promise((r) => setTimeout(r, ms));
+    await this.adapter.setPTT(false);
     await this.refreshState();
   }
 }

@@ -1,44 +1,35 @@
-import dotenv from "dotenv";
-import { z } from "zod";
+import { z } from 'zod';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
-const ConfigSchema = z.object({
-  BACKEND_PORT: z.coerce.number().default(3001),
-  CORS_ORIGIN: z.string().optional(),
-
-  // Radio Configuration
-  USE_REAL_RADIO: z.string().default('false'),
-  RIG_MODEL: z.coerce.number().default(3085),
-  RIG_PORT: z.string().default('/dev/ttyUSB0'),
-  RIG_SPEED: z.coerce.number().default(19200),
-
-  // Logging
-  LOG_LEVEL: z.string().default('info'),
-  NODE_ENV: z.string().default('development'),
+const EnvSchema = z.object({
+  BACKEND_PORT: z.coerce.number().int().positive().default(3001),
+  USE_REAL_RADIO: z
+    .union([z.literal('true'), z.literal('false')])
+    .transform((v) => v === 'true')
+    .default('true' as any),
+  RIGCTLD_HOST: z.string().default('127.0.0.1'),
+  RIGCTLD_PORT: z.coerce.number().int().positive().default(4532),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  CORS_ORIGIN: z.string().optional(), // comma-separated allowlist or * in dev
 });
 
-export type Config = z.infer<typeof ConfigSchema>;
+export type AppConfig = z.infer<typeof EnvSchema> & {
+  corsOrigins: string[] | '*';
+};
 
-let cached: Config | null = null;
-
-export function getConfig(): Config {
-  if (cached) return cached;
-  const parsed = ConfigSchema.parse({
-    BACKEND_PORT: process.env.BACKEND_PORT ?? 3001,
-    CORS_ORIGIN: process.env.CORS_ORIGIN,
-
-    // Radio Configuration
-    USE_REAL_RADIO: process.env.USE_REAL_RADIO ?? 'false',
-    RIG_MODEL: process.env.RIG_MODEL ?? 3085,
-    RIG_PORT: process.env.RIG_PORT ?? '/dev/ttyUSB0',
-    RIG_SPEED: process.env.RIG_SPEED ?? 19200,
-
-    // Logging
-    LOG_LEVEL: process.env.LOG_LEVEL ?? 'info',
-    NODE_ENV: process.env.NODE_ENV ?? 'development',
-  });
-  cached = parsed;
-  return parsed;
+export function loadConfig(): AppConfig {
+  const parsed = EnvSchema.safeParse(process.env);
+  if (!parsed.success) {
+    // eslint-disable-next-line no-console
+    console.error('Invalid environment variables:', parsed.error.flatten());
+    throw new Error('Invalid environment variables');
+  }
+  const base = parsed.data;
+  const cors = base.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean);
+  const corsOrigins = base.NODE_ENV === 'development' ? (cors && cors.length > 0 ? cors : '*') : (cors && cors.length > 0 ? cors : []);
+  return { ...base, corsOrigins } as AppConfig;
 }
 

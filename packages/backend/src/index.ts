@@ -1,366 +1,170 @@
-import Fastify from "fastify";
-import cors from "@fastify/cors";
-import { Server as IOServer } from "socket.io";
-import { getConfig } from "./config.js";
-import { ok } from "./response.js";
-import { ServiceRegistry } from "./service-registry.js";
-import { SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
-import { RadioService } from "./services/radio.js";
-import { MockRigctlAdapter } from "./adapters/mock-rigctl.js";
-import { RigctlCommandAdapter } from "./adapters/rigctl.js";
-import { RigctldAdapter } from "./adapters/rigctld.js";
-import { radioRoutes } from "./routes/radio.js";
-import { audioRoutes } from "./routes/audio.js";
-import { spectrumRoutes } from "./routes/spectrum.js";
-import { configRoutes } from "./routes/config.js";
-import { EVENTS } from "./events.js";
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import { Server as IOServer } from 'socket.io';
+import { createServer } from 'node:http';
+import pino from 'pino';
 
-const startedAt = Date.now();
+import { loadConfig } from './config.js';
+import { EVENTS } from './events.js';
+import { RadioService } from './services/radio.js';
+import { RigctldAdapter } from './adapters/rigctld.js';
+import { ConnectPayloadSchema, SetFrequencyPayloadSchema, SetModePayloadSchema, SetPowerPayloadSchema, SetPTTPayloadSchema, TunePayloadSchema } from './dtos.js';
+import type { RadioState } from './dtos.js';
+import { radioRoutes } from './routes/radio.js';
 
-async function start() {
-  const config = getConfig();
-  const app = Fastify({
-    logger:
-      process.env.NODE_ENV === "production"
-        ? { level: process.env.LOG_LEVEL ?? "info" }
-        : {
-            level: process.env.LOG_LEVEL ?? "info",
-            transport: { target: "pino-pretty", options: { colorize: true } },
-          },
-  });
+async function main() {
+  const cfg = loadConfig();
 
-  // CORS for HTTP
-  await app.register(cors, {
-    origin: true, // Allow all origins for now
+  const fastify = Fastify({ logger: { level: cfg.LOG_LEVEL } });
+
+  const log = fastify.log;
+
+
+  const corsOrigins = cfg.corsOrigins;
+  await fastify.register(cors, {
+    origin: corsOrigins === '*' ? true : (origin, cb) => {
+      if (!origin) return cb(null, true);
+      const allowed = Array.isArray(corsOrigins) && corsOrigins.some((o) => origin.startsWith(o));
+      cb(null, allowed);
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  const registry = new ServiceRegistry();
+  // Health endpoint
+  fastify.get('/api/health', async () => ({
+    name: 'rigboss-backend',
+    version: '0.1.0',
+    status: 'ok',
+    uptimeSec: Math.floor(process.uptime()),
+    services: ['radio'],
+  }));
 
-  // Instantiate services and register
-  // Choose adapter based on environment
-  const useRealRadio = config.USE_REAL_RADIO === 'true';
-  const rigAdapter = useRealRadio
-    ? new RigctldAdapter() // Use daemon adapter - connects to port 4532
-    : new MockRigctlAdapter();
-
-  const radio = new RadioService({ adapter: rigAdapter });
-  const audio = new (await import("./services/audio.js")).AudioService();
-  const spectrum = new (await import("./services/spectrum.js")).SpectrumService();
-  const configSvc = new (await import("./services/config.js")).ConfigService();
-
-  registry.register({
-    metadata: {
-      name: "radio",
-      version: "0.1.0",
-      endpoints: [
-        { method: "POST", path: "/api/radio/connect" },
-        { method: "POST", path: "/api/radio/disconnect" },
-        { method: "GET", path: "/api/radio/state" },
-        { method: "POST", path: "/api/radio/frequency" },
-        { method: "POST", path: "/api/radio/mode" },
-        { method: "POST", path: "/api/radio/power" },
-        { method: "POST", path: "/api/radio/ptt" }
-      ],
-    },
-    getHealth: async () => ({
-      name: "radio",
-      version: "0.1.0",
-      status: "healthy",
-      uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
-    }),
-  });
-
-  registry.register({
-    metadata: {
-      name: "audio",
-      version: "0.1.0",
-      endpoints: [
-        { method: "POST", path: "/api/audio/start" },
-        { method: "POST", path: "/api/audio/stop" },
-        { method: "GET", path: "/api/audio/status" }
-      ],
-    },
-    getHealth: async () => ({
-      name: "audio",
-      version: "0.1.0",
-      status: "healthy",
-      uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
-    }),
-  });
-
-  registry.register({
-    metadata: {
-      name: "spectrum",
-      version: "0.1.0",
-      endpoints: [
-        { method: "POST", path: "/api/spectrum/start" },
-        { method: "POST", path: "/api/spectrum/stop" },
-        { method: "GET", path: "/api/spectrum/settings" },
-        { method: "POST", path: "/api/spectrum/settings" }
-      ],
-    },
-    getHealth: async () => ({
-      name: "spectrum",
-      version: "0.1.0",
-      status: "healthy",
-      uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
-    }),
-  });
-
-  registry.register({
-    metadata: {
-      name: "config",
-      version: "0.1.0",
-      endpoints: [
-        { method: "GET", path: "/api/config" },
-        { method: "POST", path: "/api/config" },
-        { method: "POST", path: "/api/config/reset" }
-      ],
-    },
-    getHealth: async () => ({
-      name: "config",
-      version: "0.1.0",
-      status: "healthy",
-      uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
-    }),
-  });
-
-  // Add request logging middleware
-  app.addHook('onRequest', async (request, reply) => {
-    app.log.info(`📥 ${request.method} ${request.url}`);
-  });
-
-  app.addHook('onResponse', async (request, reply) => {
-    app.log.info(`📤 ${request.method} ${request.url} → ${reply.statusCode}`);
-  });
-
-  // HTTP routes
-  await radioRoutes(app, radio);
-  await audioRoutes(app, audio);
-  await spectrumRoutes(app, spectrum);
-  await configRoutes(app, configSvc);
-
-  app.get("/api/health", async (_req, _rep) => {
-    const uptimeSec = Math.floor((Date.now() - startedAt) / 1000);
-    const services = await registry.checkHealth().catch(() => []);
-    return ok({
-      name: SERVICE_NAME,
-      version: SERVICE_VERSION,
-      status: "healthy",
-      uptimeSec,
-      services,
-    });
-  });
-
-  app.get("/api/services", async () => {
-    return ok(registry.listMetadata());
-  });
-
-  // Start listen first to have server
-  await app.listen({ port: config.BACKEND_PORT, host: "0.0.0.0" });
-
-  // Socket.IO sharing the same HTTP server
-  const io = new IOServer(app.server, {
-    path: "/socket.io",
+  const io = new IOServer(fastify.server, {
+    path: '/socket.io',
     cors: {
-      origin: true, // Allow all origins
-      credentials: true,
+      origin: corsOrigins === '*' ? true : (Array.isArray(corsOrigins) ? corsOrigins : []),
       methods: ['GET', 'POST'],
+      credentials: true,
     },
   });
 
-  function wireNamespace(nsp: string) {
-    const namespace = io.of(nsp);
-    namespace.on("connection", (socket) => {
-      app.log.info({ nsp, id: socket.id }, "socket connected");
+  // Radio service
+  const radio = new RadioService(new RigctldAdapter(cfg.RIGCTLD_HOST, cfg.RIGCTLD_PORT));
 
-      if (nsp === "/") {
-        // Radio command handlers over WebSocket
-        socket.on("radio:connect", async (payload: any = {}, cb?: (res: any) => void) => {
-          try {
-            const host = typeof payload?.host === 'string' ? payload.host : '127.0.0.1';
-            const port = Number(payload?.port ?? 4532);
-            await radio.connect(host, port);
-            await radio.refreshState();
-            cb?.(null, { ok: true });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'connect failed' });
-          }
-        });
+  // Relay radio events to all clients
+  radio.on(EVENTS.RADIO_STATE, (state: RadioState) => io.emit(EVENTS.RADIO_STATE, state));
+  radio.on(EVENTS.CONNECTION_STATUS, (data: { connected: boolean }) => io.emit(EVENTS.CONNECTION_STATUS, data));
 
-        socket.on("radio:disconnect", async (_: any = {}, cb?: (res: any) => void) => {
-          try {
-            await radio.disconnect();
-            cb?.({ ok: true });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'disconnect failed' });
-          }
-        });
+  // WebSocket handlers
+  io.on('connection', (socket) => {
+    log.info({ id: socket.id }, 'WS client connected');
 
-        socket.on("radio:setFrequency", async (payload: any, cb?: (err: any, res?: any) => void) => {
-          try {
-            const hz = Number(payload?.frequency);
-            if (!Number.isFinite(hz) || hz <= 0) throw new Error('invalid frequency');
-            await radio.setFrequency(hz);
-            cb?.(null, { ok: true });
-          } catch (e: any) {
-            cb?.(e?.message || 'setFrequency failed');
-          }
-        });
-
-        socket.on("radio:setMode", async (payload: any, cb?: (res: any) => void) => {
-          try {
-            const mode = payload?.mode as any;
-            const bw = payload?.bandwidthHz ? Number(payload.bandwidthHz) : undefined;
-            if (!mode) throw new Error('mode required');
-            await radio.setMode(mode, bw);
-            cb?.(null, { ok: true });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'setMode failed' });
-          }
-        });
-
-        socket.on("radio:setPower", async (payload: any, cb?: (res: any) => void) => {
-          try {
-            const percent = Number(payload?.power);
-            if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new Error('invalid power');
-            await radio.setPower(percent);
-            cb?.(null, { ok: true });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'setPower failed' });
-          }
-        });
-
-        socket.on("radio:setPTT", async (payload: any, cb?: (res: any) => void) => {
-          try {
-            const ptt = !!payload?.ptt;
-            await radio.setPtt(ptt);
-            cb?.(null, { ok: true });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'setPTT failed' });
-          }
-        });
-
-        socket.on("radio:tune", async (payload: any, cb?: (err: any, res?: any) => void) => {
-          try {
-            // Simple tuner assist: key low power for a short burst
-            await radio.setPower(5);
-            await radio.setPtt(true);
-            setTimeout(async () => {
-              await radio.setPtt(false);
-              cb?.(null, { ok: true });
-            }, Math.min(Math.max(Number(payload?.ms ?? 1200), 300), 5000));
-          } catch (e: any) {
-            cb?.(e?.message || 'tune failed');
-          }
-        });
-      }
-        // Optional: VFO and Split (if adapter supports)
-        socket.on("radio:setVFO", async (payload: any, cb?: (res: any) => void) => {
-          try {
-            // TODO: implement if adapter supports VFO
-            cb?.({ ok: false, error: 'VFO not supported yet' });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'setVFO failed' });
-          }
-        });
-
-        socket.on("radio:setSplit", async (payload: any, cb?: (res: any) => void) => {
-          try {
-            // TODO: implement if adapter supports split
-            cb?.({ ok: false, error: 'Split not supported yet' });
-          } catch (e: any) {
-            cb?.({ ok: false, error: e?.message || 'setSplit failed' });
-          }
-        });
-
-      socket.on("disconnect", (reason) => {
-        app.log.info({ nsp, id: socket.id, reason }, "socket disconnected");
-      });
+    socket.on('disconnect', (reason) => {
+      log.info({ id: socket.id, reason }, 'WS client disconnected');
     });
-  }
 
-  // Emit all events to root namespace for frontend
-  radio.on(EVENTS.CONNECTION_STATUS, (payload) => io.emit(EVENTS.CONNECTION_STATUS, payload));
-  radio.on(EVENTS.RADIO_STATE, (state) => io.emit(EVENTS.RADIO_STATE, state));
-  audio.on(EVENTS.AUDIO_STATUS, (status) => io.emit(EVENTS.AUDIO_STATUS, status));
-  spectrum.on(EVENTS.SPECTRUM_FRAME, (frame) => io.emit(EVENTS.SPECTRUM_FRAME, frame));
-  spectrum.on(EVENTS.SPECTRUM_SETTINGS_CHANGED, (settings) => io.emit(EVENTS.SPECTRUM_SETTINGS_CHANGED, settings));
-
-  wireNamespace("/");
-  wireNamespace("/radio");
-  wireNamespace("/audio");
-  wireNamespace("/spectrum");
-
-  // Start backend immediately, try radio connection in background
-  app.log.info(
-    { port: config.BACKEND_PORT },
-    `Backend listening on :${config.BACKEND_PORT}`
-  );
-
-  // Try radio connection and keep retrying until success; poll only when connected
-  if (useRealRadio) {
-    let pollTimer: NodeJS.Timeout | null = null;
-    const startPolling = () => {
-      if (pollTimer) return;
-      pollTimer = setInterval(async () => {
-        try {
-          await radio.refreshState();
-        } catch (error) {
-          app.log.error('Radio polling error:', error);
-        }
-      }, 1000);
-    };
-    const stopPolling = () => {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    };
-
-    const attemptConnect = async (delayMs = 1500) => {
+    socket.on('radio:connect', async (payload, cb) => {
       try {
-        app.log.info('🔄 Attempting to connect to radio...');
-        await radio.connect('127.0.0.1', 4532);
-        app.log.info('✅ Radio connected! Starting real-time polling...');
-        startPolling();
-      } catch (error: any) {
-        stopPolling();
-        app.log.error('❌ Radio connection failed:', error?.message || error);
-        // Emit a single disconnected state snapshot (no spammy interval)
-        radio.emit(EVENTS.RADIO_STATE, { connected: false });
-        setTimeout(() => attemptConnect(Math.min(delayMs * 1.5, 15000)), delayMs);
+        const dto = ConnectPayloadSchema.parse(payload ?? {});
+        const ok = await radio.connect(dto.host, dto.port);
+        cb && cb(null, { ok });
+      } catch (e: any) {
+        cb && cb(e.message || 'invalid payload');
       }
-    };
+    });
 
-    // Kick off connection attempts
-    attemptConnect();
-  } else {
-      // @TODO - REMOVE ALL MOCK MODE ASPECTS OF THE STACK
-    // Mock mode with changing data
-    setInterval(() => {
-      radio.emit(EVENTS.RADIO_STATE, {
-        connected: true,
-        frequencyHz: 14200000 + Math.floor(Math.random() * 1000),
-        mode: 'USB',
-        power: 50 + Math.floor(Math.random() * 50),
-        rigModel: 'Mock IC-7300',
-      });
-    }, 2000);
-  }
+    socket.on('radio:disconnect', async (_payload, cb) => {
+      try {
+        await radio.disconnect();
+        cb && cb(null, { ok: true });
+      } catch (e: any) {
+        cb && cb(e.message || 'error');
+      }
+    });
 
-  app.log.info(
-    { port: config.BACKEND_PORT },
-    `Backend listening on :${config.BACKEND_PORT}`
-  );
+    socket.on('radio:setFrequency', async (payload, cb) => {
+      try {
+        const dto = SetFrequencyPayloadSchema.parse(payload);
+        await radio.setFrequency(dto.frequency);
+        cb && cb(null, { ok: true });
+      } catch (e: any) {
+        cb && cb(e.message || 'error');
+      }
+    });
+
+    socket.on('radio:setMode', async (payload, cb) => {
+      try {
+        const dto = SetModePayloadSchema.parse(payload);
+        await radio.setMode(dto.mode, dto.bandwidthHz);
+        cb && cb(null, { ok: true });
+      } catch (e: any) {
+        cb && cb(e.message || 'error');
+      }
+    });
+
+    socket.on('radio:setPower', async (payload, cb) => {
+      try {
+        const dto = SetPowerPayloadSchema.parse(payload);
+        await radio.setPower(dto.power);
+        cb && cb(null, { ok: true });
+      } catch (e: any) {
+        cb && cb(e.message || 'error');
+      }
+    });
+
+    socket.on('radio:setPTT', async (payload, cb) => {
+      try {
+        const dto = SetPTTPayloadSchema.parse(payload);
+        await radio.setPTT(dto.ptt);
+        cb && cb(null, { ok: true });
+      } catch (e: any) {
+        cb && cb(e.message || 'error');
+      }
+    });
+
+    socket.on('radio:tune', async (payload, cb) => {
+      try {
+        const dto = TunePayloadSchema.parse(payload ?? {});
+        await radio.tune(dto.ms);
+        cb && cb(null, { ok: true });
+      } catch (e: any) {
+        cb && cb(e.message || 'error');
+      }
+    });
+  });
+
+  // Minimal HTTP debug routes
+  await fastify.register(async (instance) => {
+    await radioRoutes(instance, { radio });
+  });
+
+  // Start server
+  await fastify.listen({ port: cfg.BACKEND_PORT, host: '0.0.0.0' });
+  log.info(`Backend listening on 0.0.0.0:${cfg.BACKEND_PORT}`);
+
+  // Connection lifecycle: try connect and poll
+  const attemptConnect = async () => {
+    let backoff = 1500;
+    // Try initial connect immediately
+    for (;;) {
+      const ok = await radio.connect(cfg.RIGCTLD_HOST, cfg.RIGCTLD_PORT);
+      if (ok) {
+        log.info('Radio connected to rigctld');
+        return;
+      }
+      log.warn(`Radio connect failed, retrying in ${Math.floor(backoff)} ms`);
+      await new Promise((r) => setTimeout(r, backoff));
+      backoff = Math.min(backoff * 1.5, 15000);
+    }
+  };
+
+  attemptConnect().catch((e) => log.error(e, 'Radio connect loop error'));
 }
 
-start().catch((err) => {
+main().catch((err) => {
   // eslint-disable-next-line no-console
-  console.error("Fatal startup error", err);
+  console.error(err);
   process.exit(1);
 });
 
