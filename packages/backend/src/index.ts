@@ -242,6 +242,19 @@ async function start() {
           } catch (e: any) {
             cb?.({ ok: false, error: e?.message || 'setPTT failed' });
           }
+        socket.on("radio:tune", async (payload: any, cb?: (err: any, res?: any) => void) => {
+          try {
+            // Simple tuner assist: key low power for a short burst
+            await radio.setPower(5);
+            await radio.setPtt(true);
+            setTimeout(async () => {
+              await radio.setPtt(false);
+              cb?.(null, { ok: true });
+            }, Math.min(Math.max(Number(payload?.ms ?? 1200), 300), 5000));
+          } catch (e: any) {
+            cb?.(e?.message || 'tune failed');
+          }
+        });
         });
       }
         // Optional: VFO and Split (if adapter supports)

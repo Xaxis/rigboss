@@ -184,17 +184,11 @@ export const useRadioStore = create<RadioStore>()(
     setTuning: async (tuning: boolean) => {
       const oldTuning = get().tuning;
       set({ tuning }); // Optimistic update
-      
       try {
-        const response = await fetch('/api/radio/tune', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tuning }),
-        });
-        
-        if (!response.ok) {
-          set({ tuning: oldTuning }); // Revert on error
-          throw new Error('Failed to set tuning');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        if (tuning) {
+          await ws.emitWithAck('radio:tune', { ms: 1200 });
         }
       } catch (error) {
         console.error('Set tuning error:', error);

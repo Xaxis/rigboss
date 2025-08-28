@@ -42,33 +42,50 @@ export class RigctldAdapter implements RigctlAdapter {
   }
 
   private async sendCommand(command: string): Promise<string> {
+    // Use a fresh connection per command to avoid interleaving responses.
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.connected) {
-        reject(new Error('Not connected to rigctld'));
-        return;
-      }
-
-      let response = '';
-      
-      const onData = (data: Buffer) => {
-        response += data.toString();
-        // Check if we have a complete response (ends with newline)
-        if (response.includes('\n')) {
-          this.socket!.off('data', onData);
-          resolve(response.trim());
+      const sock = new Socket();
+      let buf = '';
+      let finished = false;
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          try { sock.destroy(); } catch {}
+          reject(new Error(`Command timeout: ${command}`));
         }
+      }, 5000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        sock.removeAllListeners();
+        try { sock.end(); } catch {}
+        try { sock.destroy(); } catch {}
       };
 
-      this.socket.on('data', onData);
-      
-      // Send command
-      this.socket.write(command + '\n');
-      
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        this.socket!.off('data', onData);
-        reject(new Error(`Command timeout: ${command}`));
-      }, 5000);
+      sock.on('error', (err) => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        reject(err);
+      });
+
+      sock.on('data', (data: Buffer) => {
+        if (finished) return;
+        buf += data.toString();
+        // rigctld terminates responses with a line starting with RPRT
+        const lines = buf.split(/\r?\n/);
+        const rprtIdx = lines.findIndex(l => /^RPRT\s/.test(l));
+        if (rprtIdx !== -1) {
+          const payloadLines = lines.slice(0, rprtIdx).filter(l => l.length > 0);
+          finished = true;
+          cleanup();
+          resolve(payloadLines.join('\n'));
+        }
+      });
+
+      sock.connect(this.port, this.host, () => {
+        sock.write(command + '\n');
+      });
     });
   }
 
