@@ -4,7 +4,11 @@ import type { Config } from '@/types';
 export function getConfig(): Config {
   // Try to get from environment first, then fall back to localStorage settings
   let backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-  
+
+  console.log('🔧 Config Debug:');
+  console.log('  Environment VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
+  console.log('  Initial backendUrl:', backendUrl);
+
   // Check if we have stored settings that override the environment
   if (typeof window !== 'undefined') {
     try {
@@ -12,7 +16,9 @@ export function getConfig(): Config {
       if (stored) {
         const state = JSON.parse(stored);
         const settingsBackendUrl = state?.state?.settings?.backendUrl;
+        console.log('  Stored settings backendUrl:', settingsBackendUrl);
         if (settingsBackendUrl) {
+          console.log('  🚨 OVERRIDING with stored settings!');
           backendUrl = settingsBackendUrl;
         }
       }
@@ -20,6 +26,8 @@ export function getConfig(): Config {
       console.warn('Failed to load backend URL from settings:', error);
     }
   }
+
+  console.log('  Final backendUrl:', backendUrl);
 
   // Ensure URL doesn't end with slash
   backendUrl = backendUrl.replace(/\/$/, '');

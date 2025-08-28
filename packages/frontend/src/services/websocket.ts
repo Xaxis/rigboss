@@ -101,9 +101,30 @@ class WebSocketService {
           this.notifyEventHandlers(eventName, data);
         });
 
+        // Set up radio event listeners
+        this.setupRadioEventListeners();
+
       } catch (error) {
         reject(error);
       }
+    });
+  }
+
+  private setupRadioEventListeners(): void {
+    if (!this.socket) return;
+
+    // Listen for radio state updates (matches backend EVENTS.RADIO_STATE)
+    this.socket.on('radio_state', (data: any) => {
+      console.log('📻 Received radio state:', data);
+      const { useRadioStore } = require('../stores/radio');
+      useRadioStore.getState().updateFromBackend(data);
+    });
+
+    // Listen for connection status updates
+    this.socket.on('connection_status', (data: any) => {
+      console.log('📻 Received connection status:', data);
+      const { useRadioStore } = require('../stores/radio');
+      useRadioStore.getState().updateFromBackend({ connected: data.connected });
     });
   }
 

@@ -19,16 +19,16 @@ interface RadioStore extends RadioState {
 
 const initialState: RadioState = {
   connected: false,
-  frequency: 14200000, // 20m band default
+  frequency: 0, // Will be updated from backend
   mode: 'USB',
-  power: 100,
+  power: 0, // Will be updated from backend
   vfo: 'A',
   split: false,
   ptt: false,
   tuning: false,
   swr: 1.2,
   signalStrength: -85,
-  model: '',
+  model: 'Connecting...',
   serialNumber: '',
   firmwareVersion: '',
 };
@@ -251,6 +251,7 @@ export const useRadioStore = create<RadioStore>()(
     },
 
     updateFromBackend: (data: Partial<RadioState>) => {
+      console.log('🔧 Radio store updating from backend:', data);
       set(data);
     },
   }))

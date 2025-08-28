@@ -183,6 +183,36 @@ async function start() {
   wireNamespace("/audio");
   wireNamespace("/spectrum");
 
+  // Auto-connect to radio and start polling
+  if (useRealRadio) {
+    try {
+      await radio.connect('localhost', 4532); // Connect to rigctld or direct
+      app.log.info('Radio connected, starting polling...');
+
+      // Poll radio state every 1 second
+      setInterval(async () => {
+        try {
+          await radio.refreshState();
+        } catch (error) {
+          app.log.error('Radio polling error:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      app.log.error('Failed to connect to radio:', error);
+    }
+  } else {
+    // For mock mode, simulate some data changes
+    setInterval(() => {
+      radio.emit(EVENTS.RADIO_STATE, {
+        connected: true,
+        frequencyHz: 14200000 + Math.floor(Math.random() * 1000),
+        mode: 'USB',
+        power: 50 + Math.floor(Math.random() * 50),
+        rigModel: 'Mock IC-7300',
+      });
+    }, 2000);
+  }
+
   app.log.info(
     { port: config.BACKEND_PORT },
     `Backend listening on :${config.BACKEND_PORT}`
