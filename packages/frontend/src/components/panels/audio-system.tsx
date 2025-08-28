@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Volume2, Mic, MicOff, Play, Square, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { AudioDeviceSelector } from '@/components/audio/audio-device-selector';
 import { AudioLevelMeter } from '@/components/audio/audio-level-meter';
 import { AudioControls } from '@/components/audio/audio-controls';
@@ -118,7 +119,9 @@ export function AudioSystemPanel() {
               {/* Radio Audio Output Device */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Output Device (Radio → Computer)</label>
-                <AudioDeviceSelector type="output" />
+                <ErrorBoundary>
+                  <AudioDeviceSelector type="output" />
+                </ErrorBoundary>
               </div>
               
               {/* Radio Audio Level */}
@@ -165,7 +168,9 @@ export function AudioSystemPanel() {
               {/* Computer Audio Input Device */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Input Device (Computer → Radio)</label>
-                <AudioDeviceSelector type="input" />
+                <ErrorBoundary>
+                  <AudioDeviceSelector type="input" />
+                </ErrorBoundary>
               </div>
               
               {/* Computer Audio Level */}

@@ -21,7 +21,10 @@ export function AudioDeviceSelector({ type }: AudioDeviceSelectorProps) {
   const setSelectedDevice = type === 'input' ? setSelectedInputDevice : setSelectedOutputDevice;
 
   const handleDeviceChange = (deviceId: string) => {
-    setSelectedDevice(deviceId);
+    // Don't allow empty strings or invalid values
+    if (deviceId && deviceId !== 'no-devices') {
+      setSelectedDevice(deviceId);
+    }
   };
 
   const handleRefresh = async () => {
@@ -54,7 +57,7 @@ export function AudioDeviceSelector({ type }: AudioDeviceSelectorProps) {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div className="flex-1">
-          <Select value={selectedDevice || ''} onValueChange={handleDeviceChange}>
+          <Select value={selectedDevice || undefined} onValueChange={handleDeviceChange}>
             <SelectTrigger className="w-full">
               <div className="flex items-center gap-2">
                 {getDeviceIcon()}
@@ -63,12 +66,12 @@ export function AudioDeviceSelector({ type }: AudioDeviceSelectorProps) {
             </SelectTrigger>
             <SelectContent>
               {devices.length === 0 ? (
-                <SelectItem value="" disabled>
+                <SelectItem value="no-devices" disabled>
                   No {type} devices found
                 </SelectItem>
               ) : (
                 devices.map((device) => (
-                  <SelectItem key={device.id} value={device.id}>
+                  <SelectItem key={device.id} value={device.id || `device-${Math.random()}`}>
                     <div className="flex items-center gap-2">
                       {getDeviceIcon()}
                       <div>

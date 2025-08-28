@@ -66,28 +66,28 @@ export const useAudioStore = create<AudioStore>()(
       try {
         // Request permissions first
         await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const audioDevices = devices.filter(device => 
+        const audioDevices = devices.filter(device =>
           device.kind === 'audioinput' || device.kind === 'audiooutput'
         );
 
         const inputDevices: AudioDevice[] = audioDevices
           .filter(device => device.kind === 'audioinput')
           .map(device => ({
-            id: device.deviceId,
-            label: device.label || `Microphone ${device.deviceId.slice(0, 8)}`,
+            id: device.deviceId || `input-${Math.random().toString(36).substr(2, 9)}`,
+            label: device.label || `Microphone ${device.deviceId?.slice(0, 8) || 'Unknown'}`,
             kind: 'audioinput',
-            groupId: device.groupId,
+            groupId: device.groupId || '',
           }));
 
         const outputDevices: AudioDevice[] = audioDevices
           .filter(device => device.kind === 'audiooutput')
           .map(device => ({
-            id: device.deviceId,
-            label: device.label || `Speaker ${device.deviceId.slice(0, 8)}`,
+            id: device.deviceId || `output-${Math.random().toString(36).substr(2, 9)}`,
+            label: device.label || `Speaker ${device.deviceId?.slice(0, 8) || 'Unknown'}`,
             kind: 'audiooutput',
-            groupId: device.groupId,
+            groupId: device.groupId || '',
           }));
 
         set({ inputDevices, outputDevices });
@@ -102,7 +102,8 @@ export const useAudioStore = create<AudioStore>()(
         }
       } catch (error) {
         console.error('Failed to refresh audio devices:', error);
-        throw error;
+        // Set empty arrays instead of throwing to prevent crashes
+        set({ inputDevices: [], outputDevices: [] });
       }
     },
 
