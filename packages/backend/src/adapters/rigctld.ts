@@ -65,19 +65,26 @@ export class RigctldAdapter {
     if (host) this.host = host;
     if (port) this.port = port;
     try {
-      // Probe with a simple read command
       const lines = await sendCommand(this.host, this.port, 'f');
-      const { ok } = parseRPRT(lines);
-      this.connected = ok;
-      return ok;
-    } catch (e) {
+      const { ok, code } = parseRPRT(lines);
+      if (!ok) {
+        this.connected = false;
+        throw new Error(`rigctld probe failed (RPRT ${code}) at ${this.host}:${this.port}`);
+      }
+      this.connected = true;
+      return true;
+    } catch (e: any) {
       this.connected = false;
-      return false;
+      throw new Error(e?.message || `rigctld connect failed at ${this.host}:${this.port}`);
     }
   }
 
   async disconnect(): Promise<void> {
     this.connected = false;
+  }
+
+  getTarget(): { host: string; port: number } {
+    return { host: this.host, port: this.port };
   }
 
   isConnected(): boolean {

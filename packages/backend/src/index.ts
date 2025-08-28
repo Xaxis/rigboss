@@ -19,7 +19,6 @@ async function main() {
 
   const log = fastify.log;
 
-
   const corsOrigins = cfg.corsOrigins;
   await fastify.register(cors, {
     origin: corsOrigins === '*' ? true : (origin, cb) => {
@@ -38,6 +37,7 @@ async function main() {
     status: 'ok',
     uptimeSec: Math.floor(process.uptime()),
     services: ['radio'],
+    rigctld: { host: cfg.RIGCTLD_HOST, port: cfg.RIGCTLD_PORT },
   }));
 
   const io = new IOServer(fastify.server, {
