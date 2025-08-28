@@ -44,6 +44,8 @@ async function main() {
       // Room for future queue metrics; keep minimal now
       connected: true,
     },
+    metrics: () => (radio as any).getMetrics ? (radio as any).getMetrics() : undefined,
+
   }));
 
   const io = new IOServer(fastify.server, {

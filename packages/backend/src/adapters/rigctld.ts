@@ -23,13 +23,29 @@ class PersistentRigctldClient {
   private port: number;
   private socket: net.Socket | null = null;
   private connected = false;
+  private reconnecting = false;
   private buffer = '';
-  private current: (PendingCmd & { lines: string[]; idleTimer?: NodeJS.Timeout; hardTimer?: NodeJS.Timeout }) | null = null;
+  private current: (PendingCmd & { lines: string[]; idleTimer?: NodeJS.Timeout; hardTimer?: NodeJS.Timeout; startedAt?: number }) | null = null;
   private queue: PendingCmd[] = [];
+  private lastError: string | null = null;
+  private lastRprtAt: number | null = null;
 
   constructor(host: string, port: number) {
     this.host = host;
     this.port = port;
+  }
+
+  getMetrics() {
+    return {
+      connected: this.connected,
+      reconnecting: this.reconnecting,
+      queueSize: this.queue.length + (this.current ? 1 : 0),
+      inflightCmd: this.current?.cmd ?? null,
+      inflightAgeMs: this.current?.startedAt ? Date.now() - this.current.startedAt : null,
+      lastError: this.lastError,
+      lastRprtAt: this.lastRprtAt,
+      target: { host: this.host, port: this.port },
+    };
   }
 
   getTarget() { return { host: this.host, port: this.port }; }
