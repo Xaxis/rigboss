@@ -19,7 +19,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       rigModel: options.rigModel || 3085, // Default to IC-7300
       rigPort: options.rigPort || '/dev/ttyUSB0',
       rigSpeed: options.rigSpeed || 19200,
-      timeout: options.timeout || 5000,
+      timeout: options.timeout || 15000, // Increased timeout for IC-7300
     };
   }
 
@@ -131,6 +131,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
         '-m', this.options.rigModel.toString(),
         '-r', this.options.rigPort,
         '-s', this.options.rigSpeed.toString(),
+        '-C', 'timeout=10000', // Add timeout parameter for IC-7300
         command,
         ...args
       ];
