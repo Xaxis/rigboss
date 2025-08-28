@@ -7,6 +7,7 @@ import { ServiceRegistry } from "./service-registry.js";
 import { SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { RadioService } from "./services/radio.js";
 import { MockRigctlAdapter } from "./adapters/mock-rigctl.js";
+import { RigctlCommandAdapter, RigctldAdapter } from "./adapters/rigctl.js";
 import { radioRoutes } from "./routes/radio.js";
 import { audioRoutes } from "./routes/audio.js";
 import { spectrumRoutes } from "./routes/spectrum.js";
@@ -35,7 +36,17 @@ async function start() {
   const registry = new ServiceRegistry();
 
   // Instantiate services and register
-  const radio = new RadioService({ adapter: new MockRigctlAdapter() });
+  // Choose adapter based on environment
+  const useRealRadio = process.env.USE_REAL_RADIO === 'true';
+  const rigAdapter = useRealRadio
+    ? new RigctlCommandAdapter({
+        rigModel: parseInt(process.env.RIG_MODEL || '3085'),
+        rigPort: process.env.RIG_PORT || '/dev/ttyUSB0',
+        rigSpeed: parseInt(process.env.RIG_SPEED || '19200'),
+      })
+    : new MockRigctlAdapter();
+
+  const radio = new RadioService({ adapter: rigAdapter });
   const audio = new (await import("./services/audio.js")).AudioService();
   const spectrum = new (await import("./services/spectrum.js")).SpectrumService();
   const configSvc = new (await import("./services/config.js")).ConfigService();
