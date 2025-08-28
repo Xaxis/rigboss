@@ -60,6 +60,8 @@ class PersistentRigctldClient {
 
   private wireSocket(s: net.Socket) {
     s.on('data', (buf) => this.onData(buf));
+    // On close, try to reconnect in the background
+
     s.on('error', (err) => this.onSocketError(err));
     s.on('close', () => this.onSocketClose());
     s.on('end', () => this.onSocketClose());
@@ -174,6 +176,20 @@ class PersistentRigctldClient {
       this.startNext();
     });
   }
+  async reconnect(backoffMs = 1000): Promise<void> {
+    if (this.socket) return;
+    let backoff = backoffMs;
+    for (;;) {
+      try {
+        await this.connect();
+        return;
+      } catch {
+        await delay(backoff);
+        backoff = Math.min(backoff * 1.5, 15000);
+      }
+    }
+  }
+
 
   async close(): Promise<void> {
     this.onSocketClose();

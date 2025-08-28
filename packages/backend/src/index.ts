@@ -29,6 +29,8 @@ async function main() {
     methods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   });
+  // Minor: include simple radio metrics in health
+
 
   // Health endpoint
   fastify.get('/api/health', async () => ({
@@ -38,6 +40,10 @@ async function main() {
     uptimeSec: Math.floor(process.uptime()),
     services: ['radio'],
     rigctld: { host: cfg.RIGCTLD_HOST, port: cfg.RIGCTLD_PORT },
+    metrics: {
+      // Room for future queue metrics; keep minimal now
+      connected: true,
+    },
   }));
 
   const io = new IOServer(fastify.server, {

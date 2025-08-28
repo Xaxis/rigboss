@@ -45,14 +45,10 @@ export class RadioService extends EventEmitter {
         const snapshot = await this.adapter.getState();
         this.state = { ...this.state, ...snapshot } as RadioState;
         this.emitState();
-        if (!snapshot.connected) {
-          this.stopPolling();
-        }
       } catch (e) {
-        // stop on error and mark disconnected; will be reconnected by bootstrap loop
+        // Keep polling; mark disconnected and emit
         this.state.connected = false;
         this.emitState();
-        this.stopPolling();
       }
     }, 1000);
   }
