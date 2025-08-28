@@ -39,7 +39,11 @@ async function start() {
   // Choose adapter based on environment
   const useRealRadio = config.USE_REAL_RADIO === 'true';
   const rigAdapter = useRealRadio
-    ? new RigctldAdapter() // Use daemon adapter for IC-7300
+    ? new RigctlCommandAdapter({
+        rigModel: config.RIG_MODEL,
+        rigPort: config.RIG_PORT,
+        rigSpeed: config.RIG_SPEED,
+      })
     : new MockRigctlAdapter();
 
   const radio = new RadioService({ adapter: rigAdapter });
@@ -122,6 +126,15 @@ async function start() {
       status: "healthy",
       uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
     }),
+  });
+
+  // Add request logging middleware
+  app.addHook('onRequest', async (request, reply) => {
+    app.log.info(`📥 ${request.method} ${request.url}`);
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    app.log.info(`📤 ${request.method} ${request.url} → ${reply.statusCode}`);
   });
 
   // HTTP routes
