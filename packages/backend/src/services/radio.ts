@@ -37,12 +37,9 @@ export class RadioService extends EventEmitter {
   }
 
   async refreshState() {
-    console.log('🔄 Polling radio for current state...');
     const partial = await this.opts.adapter.getState();
-    console.log('📻 Radio state received:', partial);
     this.state = { ...this.state, ...partial };
     this.emit(EVENTS.RADIO_STATE, this.state);
-    console.log('📡 Radio state emitted to frontend');
   }
 
   getState(): RadioState {

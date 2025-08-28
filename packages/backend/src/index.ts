@@ -224,15 +224,13 @@ async function start() {
 
       // Emit disconnected state and keep trying to connect
       setInterval(() => {
-        const state = {
+        radio.emit(EVENTS.RADIO_STATE, {
           connected: false,
           frequencyHz: 0,
           mode: 'USB',
           power: 0,
           rigModel: 'IC-7300 (Disconnected)',
-        };
-        console.log('📡 Emitting disconnected radio state:', state);
-        radio.emit(EVENTS.RADIO_STATE, state);
+        });
       }, 2000);
     }
   } else {

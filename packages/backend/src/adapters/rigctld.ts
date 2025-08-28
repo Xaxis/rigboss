@@ -62,7 +62,6 @@ export class RigctldAdapter implements RigctlAdapter {
       this.socket.on('data', onData);
       
       // Send command
-      console.log(`📤 Sending rigctld command: ${command}`);
       this.socket.write(command + '\n');
       
       // Timeout after 5 seconds
@@ -76,7 +75,6 @@ export class RigctldAdapter implements RigctlAdapter {
   async getFrequency(): Promise<number> {
     const response = await this.sendCommand('f');
     const freq = parseInt(response.trim());
-    console.log(`📻 Frequency: ${freq} Hz`);
     return freq;
   }
 
@@ -88,8 +86,7 @@ export class RigctldAdapter implements RigctlAdapter {
     const response = await this.sendCommand('m');
     const lines = response.trim().split('\n');
     const mode = lines[0] || 'USB';
-    const bandwidth = parseInt(lines[1]) || 2400;
-    console.log(`📻 Mode: ${mode}, Bandwidth: ${bandwidth}`);
+    const bandwidth = lines.length > 1 ? parseInt(lines[1]) : 2400;
     return { mode, bandwidth };
   }
 
@@ -101,8 +98,7 @@ export class RigctldAdapter implements RigctlAdapter {
   async getPower(): Promise<number> {
     const response = await this.sendCommand('l RFPOWER');
     const power = parseFloat(response.trim()) * 100; // Convert 0.0-1.0 to 0-100
-    console.log(`📻 Power: ${power}%`);
-    return Math.round(power);
+    return Math.round(Math.max(0, Math.min(100, power))); // Clamp to 0-100
   }
 
   async setPower(power: number): Promise<void> {
@@ -126,7 +122,6 @@ export class RigctldAdapter implements RigctlAdapter {
         rigModel: 'IC-7300',
       };
 
-      console.log('📻 Complete radio state:', state);
       return state;
     } catch (error) {
       console.error('❌ Failed to get radio state:', error);
