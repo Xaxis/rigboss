@@ -115,7 +115,7 @@ class WebSocketService {
 
     // Listen for radio state updates (matches backend EVENTS.RADIO_STATE)
     this.socket.on('radio_state', (data: any) => {
-      console.log('📻 Received radio state:', data);
+      console.log('📻 Frontend received radio state:', data);
       const { useRadioStore } = require('../stores/radio');
       useRadioStore.getState().updateFromBackend(data);
     });

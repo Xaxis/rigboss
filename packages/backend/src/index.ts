@@ -182,12 +182,12 @@ async function start() {
     });
   }
 
-  // root namespace: connection status passthrough
+  // Emit all events to root namespace for frontend
   radio.on(EVENTS.CONNECTION_STATUS, (payload) => io.emit(EVENTS.CONNECTION_STATUS, payload));
-  radio.on(EVENTS.RADIO_STATE, (state) => io.of("/radio").emit(EVENTS.RADIO_STATE, state));
-  audio.on(EVENTS.AUDIO_STATUS, (status) => io.of("/audio").emit(EVENTS.AUDIO_STATUS, status));
-  spectrum.on(EVENTS.SPECTRUM_FRAME, (frame) => io.of("/spectrum").emit(EVENTS.SPECTRUM_FRAME, frame));
-  spectrum.on(EVENTS.SPECTRUM_SETTINGS_CHANGED, (settings) => io.of("/spectrum").emit(EVENTS.SPECTRUM_SETTINGS_CHANGED, settings));
+  radio.on(EVENTS.RADIO_STATE, (state) => io.emit(EVENTS.RADIO_STATE, state));
+  audio.on(EVENTS.AUDIO_STATUS, (status) => io.emit(EVENTS.AUDIO_STATUS, status));
+  spectrum.on(EVENTS.SPECTRUM_FRAME, (frame) => io.emit(EVENTS.SPECTRUM_FRAME, frame));
+  spectrum.on(EVENTS.SPECTRUM_SETTINGS_CHANGED, (settings) => io.emit(EVENTS.SPECTRUM_SETTINGS_CHANGED, settings));
 
   wireNamespace("/");
   wireNamespace("/radio");

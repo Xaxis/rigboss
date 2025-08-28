@@ -259,7 +259,8 @@ export const useRadioStore = create<RadioStore>()(
 
     updateFromBackend: (data: Partial<RadioState>) => {
       console.log('🔧 Radio store updating from backend:', data);
-      set(data);
+      set((state) => ({ ...state, ...data }));
+      console.log('✅ Radio store updated');
     },
   }))
 );
