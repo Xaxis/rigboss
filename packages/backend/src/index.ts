@@ -8,8 +8,8 @@ import { loadConfig } from './config.js';
 import { EVENTS } from './events.js';
 import { RadioService } from './services/radio.js';
 import { RigctldAdapter } from './adapters/rigctld.js';
-import { ConnectPayloadSchema, SetFrequencyPayloadSchema, SetModePayloadSchema, SetPowerPayloadSchema, SetPTTPayloadSchema, TunePayloadSchema } from './dtos.js';
-import type { RadioState } from './dtos.js';
+import { ConnectPayloadSchema, SetFrequencyPayloadSchema, SetModePayloadSchema, SetPowerPayloadSchema, SetPTTPayloadSchema, TunePayloadSchema } from './dtos/index.js';
+import type { RadioState } from './dtos/index.js';
 import { radioRoutes } from './routes/radio.js';
 
 async function main() {

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { RadioState } from '../dtos.js';
+import type { RadioState } from '../dtos/index.js';
 import { RigctldAdapter } from '../adapters/rigctld.js';
 import { EVENTS } from '../events.js';
 
@@ -23,10 +23,11 @@ export class RadioService extends EventEmitter {
     return { ...this.state };
   }
 
-  // Expose minimal metrics via health
+  // Expose metrics via health
   getMetrics() {
     return {
       connected: this.state.connected,
+      adapter: (this.adapter as any).getMetrics ? (this.adapter as any).getMetrics() : undefined,
     };
   }
 
