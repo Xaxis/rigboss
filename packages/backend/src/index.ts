@@ -300,39 +300,43 @@ async function start() {
     `Backend listening on :${config.BACKEND_PORT}`
   );
 
-  // Try radio connection and start polling
+  // Try radio connection and keep retrying until success; poll only when connected
   if (useRealRadio) {
-    app.log.info('🔄 Attempting to connect to radio...');
-
-    try {
-      await radio.connect('localhost', 4532); // Connect to rigctld daemon
-      app.log.info('✅ Radio connected! Starting real-time polling...');
-
-      // Start real-time polling every 1 second
-      setInterval(async () => {
+    let pollTimer: NodeJS.Timeout | null = null;
+    const startPolling = () => {
+      if (pollTimer) return;
+      pollTimer = setInterval(async () => {
         try {
           await radio.refreshState();
         } catch (error) {
           app.log.error('Radio polling error:', error);
         }
       }, 1000);
+    };
+    const stopPolling = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
 
-    } catch (error) {
-      app.log.error('❌ Radio connection failed:', error);
-      app.log.error('❌ Error details:', error.message);
-      app.log.info('📡 Starting with disconnected state, will retry...');
+    const attemptConnect = async (delayMs = 1500) => {
+      try {
+        app.log.info('🔄 Attempting to connect to radio...');
+        await radio.connect('localhost', 4532);
+        app.log.info('✅ Radio connected! Starting real-time polling...');
+        startPolling();
+      } catch (error: any) {
+        stopPolling();
+        app.log.error('❌ Radio connection failed:', error?.message || error);
+        // Emit a single disconnected state snapshot (no spammy interval)
+        radio.emit(EVENTS.RADIO_STATE, { connected: false });
+        setTimeout(() => attemptConnect(Math.min(delayMs * 1.5, 15000)), delayMs);
+      }
+    };
 
-      // Emit disconnected state and keep trying to connect
-      setInterval(() => {
-        radio.emit(EVENTS.RADIO_STATE, {
-          connected: false,
-          frequencyHz: 0,
-          mode: 'USB',
-          power: 0,
-          rigModel: 'IC-7300 (Disconnected)',
-        });
-      }, 2000);
-    }
+    // Kick off connection attempts
+    attemptConnect();
   } else {
       // @TODO - REMOVE ALL MOCK MODE ASPECTS OF THE STACK
     // Mock mode with changing data
