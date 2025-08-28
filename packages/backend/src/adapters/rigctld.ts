@@ -366,7 +366,7 @@ export class RigctldAdapter {
   }
 
   async setFrequency(hz: number): Promise<void> {
-    const lines = await this.client.request(`F ${hz}`);
+    const lines = await this.client.request(`F ${hz}`, 5000, { priority: 'HIGH' });
     const { code } = parseResponse(lines);
     if (code !== 0) throw new Error('Failed to set frequency');
   }
@@ -383,7 +383,7 @@ export class RigctldAdapter {
 
   async setMode(mode: string, bandwidthHz?: number): Promise<void> {
     const cmd = bandwidthHz ? `M ${mode} ${bandwidthHz}` : `M ${mode}`;
-    const lines = await this.client.request(cmd);
+    const lines = await this.client.request(cmd, 5000, { priority: 'HIGH' });
     const { code } = parseResponse(lines);
     if (code !== 0) throw new Error('Failed to set mode');
   }
@@ -398,7 +398,7 @@ export class RigctldAdapter {
 
   async setPower(powerPercent: number): Promise<void> {
     const frac = Math.max(0, Math.min(1, powerPercent / 100));
-    const lines = await this.client.request(`L RFPOWER ${frac}`);
+    const lines = await this.client.request(`L RFPOWER ${frac}`, 5000, { priority: 'HIGH' });
     const { code } = parseResponse(lines);
     if (code !== 0) throw new Error('Failed to set power');
   }
@@ -413,7 +413,7 @@ export class RigctldAdapter {
   }
 
   async setPTT(ptt: boolean): Promise<void> {
-    const lines = await this.client.request(`T ${ptt ? 1 : 0}`);
+    const lines = await this.client.request(`T ${ptt ? 1 : 0}`, 5000, { priority: 'HIGH' });
     const { code } = parseResponse(lines);
     if (code !== 0) throw new Error('Failed to set PTT');
   }

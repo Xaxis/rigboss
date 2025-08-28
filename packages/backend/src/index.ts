@@ -55,7 +55,10 @@ async function main() {
   // Radio service
   const radio = new RadioService(new RigctldAdapter(cfg.RIGCTLD_HOST, cfg.RIGCTLD_PORT));
 
-  // Relay radio events to all clients
+  // Emit connection_status immediately
+  radio.on(EVENTS.CONNECTION_STATUS, (data) => io.emit(EVENTS.CONNECTION_STATUS, data));
+
+  // Relay radio_state to all clients
   radio.on(EVENTS.RADIO_STATE, (state: RadioState) => io.emit(EVENTS.RADIO_STATE, state));
   radio.on(EVENTS.CONNECTION_STATUS, (data: { connected: boolean }) => io.emit(EVENTS.CONNECTION_STATUS, data));
 
