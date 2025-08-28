@@ -129,12 +129,11 @@ export class RigctlCommandAdapter implements RigctlAdapter {
 
   private async executeCommand(command: string, ...args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
+      // Use interactive mode - don't pass command as argument
       const rigctlArgs = [
         '-m', this.options.rigModel.toString(),
         '-r', this.options.rigPort,
         '-s', this.options.rigSpeed.toString(),
-        command,
-        ...args
       ];
 
       console.log(`🔧 Executing: rigctl ${rigctlArgs.join(' ')}`);
@@ -145,6 +144,7 @@ export class RigctlCommandAdapter implements RigctlAdapter {
       });
       let stdout = '';
       let stderr = '';
+      let commandSent = false;
 
       const timeout = setTimeout(() => {
         childProcess.kill();
@@ -155,6 +155,21 @@ export class RigctlCommandAdapter implements RigctlAdapter {
         const output = data.toString();
         console.log(`📤 rigctl stdout: ${output.trim()}`);
         stdout += output;
+
+        // Send command when we see the prompt
+        if (output.includes('Rig command:') && !commandSent) {
+          console.log(`📝 Sending command: ${command}`);
+          childProcess.stdin.write(`${command}\n`);
+          commandSent = true;
+        }
+
+        // Look for frequency response (numeric value)
+        if (commandSent && /^\d+$/.test(output.trim())) {
+          console.log(`✅ Got frequency: ${output.trim()}`);
+          clearTimeout(timeout);
+          childProcess.stdin.write('q\n'); // quit rigctl
+          resolve(output.trim());
+        }
       });
 
       childProcess.stderr.on('data', (data) => {

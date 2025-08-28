@@ -40,11 +40,7 @@ async function start() {
   // Choose adapter based on environment
   const useRealRadio = config.USE_REAL_RADIO === 'true';
   const rigAdapter = useRealRadio
-    ? new RigctlCommandAdapter({
-        rigModel: config.RIG_MODEL,
-        rigPort: config.RIG_PORT,
-        rigSpeed: config.RIG_SPEED,
-      })
+    ? new RigctldAdapter() // Use daemon adapter - connects to port 4532
     : new MockRigctlAdapter();
 
   const radio = new RadioService({ adapter: rigAdapter });
@@ -205,7 +201,7 @@ async function start() {
     app.log.info('🔄 Attempting to connect to radio...');
 
     try {
-      await radio.connect('', 0);
+      await radio.connect('localhost', 4532); // Connect to rigctld daemon
       app.log.info('✅ Radio connected! Starting real-time polling...');
 
       // Start real-time polling every 1 second
