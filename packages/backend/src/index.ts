@@ -181,7 +181,7 @@ async function start() {
         // Radio command handlers over WebSocket
         socket.on("radio:connect", async (payload: any = {}, cb?: (res: any) => void) => {
           try {
-            const host = typeof payload?.host === 'string' ? payload.host : 'localhost';
+            const host = typeof payload?.host === 'string' ? payload.host : '127.0.0.1';
             const port = Number(payload?.port ?? 4532);
             await radio.connect(host, port);
             await radio.refreshState();
@@ -323,7 +323,7 @@ async function start() {
     const attemptConnect = async (delayMs = 1500) => {
       try {
         app.log.info('🔄 Attempting to connect to radio...');
-        await radio.connect('localhost', 4532);
+        await radio.connect('127.0.0.1', 4532);
         app.log.info('✅ Radio connected! Starting real-time polling...');
         startPolling();
       } catch (error: any) {

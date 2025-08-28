@@ -11,26 +11,9 @@ export class RigctldAdapter implements RigctlAdapter {
     this.host = host || 'localhost';
     this.port = port || 4532;
 
-    return new Promise((resolve, reject) => {
-      this.socket = new Socket();
-      
-      this.socket.connect(this.port, this.host, () => {
-        console.log(`✅ Connected to rigctld at ${this.host}:${this.port}`);
-        this.connected = true;
-        resolve();
-      });
-
-      this.socket.on('error', (error) => {
-        console.error(`❌ Rigctld connection error:`, error);
-        this.connected = false;
-        reject(error);
-      });
-
-      this.socket.on('close', () => {
-        console.log('📡 Rigctld connection closed');
-        this.connected = false;
-      });
-    });
+    // Validate by issuing a simple command; mark connected only on success
+    await this.sendCommand('f');
+    this.connected = true;
   }
 
   async disconnect(): Promise<void> {
