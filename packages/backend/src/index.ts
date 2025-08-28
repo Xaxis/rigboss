@@ -56,6 +56,9 @@ async function main() {
   const radio = new RadioService(new RigctldAdapter(cfg.RIGCTLD_HOST, cfg.RIGCTLD_PORT));
 
   // Emit connection_status immediately
+  // Relay capabilities
+  radio.on(EVENTS.RADIO_CAPS, (caps) => io.emit(EVENTS.RADIO_CAPS, caps));
+
   radio.on(EVENTS.CONNECTION_STATUS, (data) => io.emit(EVENTS.CONNECTION_STATUS, data));
 
   // Relay radio_state to all clients
@@ -65,6 +68,9 @@ async function main() {
   // WebSocket handlers
   io.on('connection', (socket) => {
     log.info({ id: socket.id }, 'WS client connected');
+    // Send capabilities to the client as soon as it connects
+    radio.discoverCapabilities().catch(() => {});
+
 
     socket.on('disconnect', (reason) => {
       log.info({ id: socket.id, reason }, 'WS client disconnected');

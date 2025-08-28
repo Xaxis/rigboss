@@ -10,6 +10,8 @@ type PendingCmd = {
   priority?: 'HIGH' | 'NORMAL';
 };
 
+
+// @TODO - WOuld this be better as a method of RigctldAdapter?
 function parseResponse(lines: string[]): { result: string[]; code: number | null } {
   const rprtIdx = lines.findIndex((l) => l.startsWith('RPRT '));
   if (rprtIdx === -1) return { result: lines.slice(), code: null };
@@ -222,92 +224,6 @@ class PersistentRigctldClient {
   }
 }
 
-function parseRPRT(lines: string[]): { ok: boolean; code: number } {
-  const last = lines.find((l) => l.startsWith('RPRT ')) || '';
-  const code = Number(last.replace('RPRT ', '').trim());
-  return { ok: code === 0, code };
-}
-
-async function sendCommand(
-  host: string,
-  port: number,
-  cmd: string,
-  timeoutMs = 5000,
-  opts: { fallbackOnNoRprt?: boolean } = {}
-): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const socket = new net.Socket();
-    const chunks: string[] = [];
-    let resolved = false;
-    let idleTimer: NodeJS.Timeout | null = null;
-    const fallback = !!opts.fallbackOnNoRprt;
-
-    const resolveWith = (linesStr: string) => {
-      const lines = linesStr.split(/\r?\n/).filter((l) => l.length > 0);
-      resolve(lines);
-    };
-
-    const cleanup = (err?: Error) => {
-      if (idleTimer) clearTimeout(idleTimer);
-      if (!resolved) {
-        resolved = true;
-        if (err) reject(err);
-      }
-      socket.destroy();
-    };
-
-    const timer = setTimeout(() => cleanup(new Error(`rigctld timeout for command: ${cmd}`)), timeoutMs);
-
-    socket.setNoDelay(true);
-    socket.connect(port, host, () => {
-      socket.write(cmd + '\n');
-    });
-
-    const scheduleIdleResolve = () => {
-      if (!fallback) return;
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        if (resolved) return;
-        clearTimeout(timer);
-        const all = chunks.join('');
-        cleanup();
-        resolveWith(all);
-      }, 200);
-    };
-
-    socket.on('data', (buf) => {
-      const text = buf.toString('utf8');
-      chunks.push(text);
-      if (text.includes('RPRT ')) {
-        clearTimeout(timer);
-        cleanup();
-        const all = chunks.join('');
-        resolveWith(all);
-      } else if (fallback) {
-        // For getters, if we got payload but no RPRT, resolve on short idle
-        scheduleIdleResolve();
-      }
-    });
-
-    socket.on('end', () => {
-      if (resolved) return;
-      clearTimeout(timer);
-      const all = chunks.join('');
-      cleanup();
-      resolveWith(all);
-    });
-
-    socket.on('error', (err) => {
-      clearTimeout(timer);
-      cleanup(err);
-    });
-
-    socket.on('close', () => {
-      // ignore
-    });
-  });
-}
-
 export class RigctldAdapter {
   private host: string;
   private port: number;
@@ -442,12 +358,80 @@ export class RigctldAdapter {
     }
   }
 
+  async getCapabilities(): Promise<import('../dtos.js').RadioCapabilities> {
+    try {
+      const lines = await this.client.request('dump_caps', 8000, { fallbackOnNoRprt: true });
+      const { result } = parseResponse(lines);
+      const levels = new Set<string>();
+      const funcs = new Set<string>();
+      const modes = new Set<string>();
+      const vfos = new Set<string>();
+      for (const raw of result) {
+        const line = raw.trim();
+
+        if (/^Level:/i.test(line)) {
+          line.replace(/^Level:\s*/i, '').split(/\s+/).forEach((t) => t && levels.add(t.trim()));
+        } else if (/^Func:/i.test(line)) {
+          line.replace(/^Func:\s*/i, '').split(/\s+/).forEach((t) => t && funcs.add(t.trim()));
+        } else if (/^Mode:/i.test(line)) {
+          line.replace(/^Mode:\s*/i, '').split(/\s+/).forEach((t) => t && modes.add(t.trim()));
+        } else if (/^VFO:/i.test(line)) {
+          line.replace(/^VFO:\s*/i, '').split(/\s+/).forEach((t) => t && vfos.add(t.trim()));
+        }
+      }
+      const probeLevel = async (name: string): Promise<boolean> => {
+        try {
+          const lines = await this.client.request(`l ${name}`, 3000, { fallbackOnNoRprt: true });
+          const { result } = parseResponse(lines);
+          return result.length > 0;
+        } catch { return false; }
+      };
+
+
+      // Verify a few levels/funcs by attempting safe reads (non-fatal)
+      const toVerifyLevels = ['RFPOWER', 'STRENGTH', 'SWR'].filter((n) => levels.has(n));
+      const toVerifyFuncs = ['PTT', 'SPLIT', 'RIT'].filter((n) => funcs.has(n));
+      const verifiedLevels: Record<string, boolean> = {};
+      const verifiedFuncs: Record<string, boolean> = {};
+      await Promise.all(toVerifyLevels.map(async (name) => { verifiedLevels[name] = await probeLevel(name); }));
+      // For funcs, we typically need setters; here we just mark presence as supported
+      toVerifyFuncs.forEach((name) => { verifiedFuncs[name] = true; });
+
+      const caps: import('../dtos.js').RadioCapabilities = {
+        levels: Array.from(levels),
+        funcs: Array.from(funcs),
+        modes: Array.from(modes),
+        vfos: Array.from(vfos),
+        supports: {
+          setFrequency: true,
+          setMode: true,
+          setPower: levels.has('RFPOWER'),
+          setPTT: funcs.has('PTT'),
+        },
+        verifiedLevels,
+        verifiedFuncs,
+      };
+      return caps;
+    } catch {
+      return {
+        levels: [], funcs: [], modes: [], vfos: [],
+        supports: { setFrequency: true, setMode: true, setPower: false, setPTT: true },
+      };
+    }
+  }
+
+  getMetrics() {
+    return this.client ? this.client.getMetrics() : undefined;
+  }
+
   async getRigModel(): Promise<string | undefined> {
     try {
       const lines = await this.client.request('v');
       const { result, code } = parseResponse(lines);
       if (code && code !== 0) return undefined;
       return result[0]?.trim();
+
+
     } catch {
       return undefined;
     }

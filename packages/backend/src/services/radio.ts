@@ -13,6 +13,12 @@ export class RadioService extends EventEmitter {
     this.adapter = adapter;
   }
 
+  // @TODO - Determine why this isnt being used yet (this method)
+  // Capabilities type and discovery
+  get defaultCaps() {
+    return { levels: [], funcs: [], canSetFrequency: true, canSetMode: true, canSetPower: false, canSetPTT: true };
+  }
+
   getState(): RadioState {
     return { ...this.state };
   }
@@ -94,6 +100,16 @@ export class RadioService extends EventEmitter {
     this.state.power = power;
     this.emitState();
     await this.refreshState();
+  }
+
+  async discoverCapabilities(): Promise<void> {
+    try {
+      const caps = await this.adapter.getCapabilities();
+      this.emit(EVENTS.RADIO_CAPS, caps);
+    } catch (e) {
+      // Emit minimal safe defaults
+      this.emit(EVENTS.RADIO_CAPS, { levels: [], funcs: [], modes: [], vfos: [], supports: { setFrequency: true, setMode: true, setPower: false, setPTT: true } });
+    }
   }
 
   async setPTT(ptt: boolean): Promise<void> {
