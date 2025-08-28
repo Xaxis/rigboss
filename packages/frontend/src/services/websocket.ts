@@ -161,6 +161,26 @@ class WebSocketService {
     }
   }
 
+  async emitWithAck<T = any>(event: string, data?: any, timeoutMs = 8000): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (!this.socket || !this.socket.connected) {
+        reject(new Error('WebSocket not connected'));
+        return;
+      }
+      try {
+        // socket.io ack with timeout
+        (this.socket as any)
+          .timeout(timeoutMs)
+          .emit(event, data, (err: any, res: T) => {
+            if (err) return reject(typeof err === 'string' ? new Error(err) : err);
+            resolve(res);
+          });
+      } catch (e) {
+        reject(e as any);
+      }
+    });
+  }
+
   subscribe(event: string, handler: EventHandler): () => void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set());

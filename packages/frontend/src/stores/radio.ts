@@ -45,39 +45,10 @@ export const useRadioStore = create<RadioStore>()(
     ...initialState,
 
     connect: async () => {
-      try {
-        const response = await apiCall('/api/radio/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Connection failed: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        if (result.success) {
-          set({ connected: true });
-          
-          // Update radio info if provided
-          if (result.data) {
-            set({
-              model: result.data.model || '',
-              serialNumber: result.data.serialNumber || '',
-              firmwareVersion: result.data.firmwareVersion || '',
-            });
-          }
-          
-          // Fetch initial radio state
-          get().fetchStatus();
-        } else {
-          throw new Error(result.error || 'Connection failed');
-        }
-      } catch (error) {
-        console.error('Radio connection failed:', error);
-        set({ connected: false });
-        throw error;
-      }
+      const { getWebSocketService } = await import('../services/websocket');
+      const ws = getWebSocketService();
+      await ws.emitWithAck('radio:connect', { host: 'localhost', port: 4532 });
+      set({ connected: true });
     },
 
     disconnect: async () => {
@@ -101,15 +72,13 @@ export const useRadioStore = create<RadioStore>()(
       set({ frequency }); // Optimistic update
       
       try {
-        const response = await apiCall('/api/radio/frequency', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ frequency }),
-        });
-        
-        if (!response.ok) {
-          set({ frequency: oldFrequency }); // Revert on error
-          throw new Error('Failed to set frequency');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        try {
+          await ws.emitWithAck('radio:setFrequency', { frequency });
+        } catch (e) {
+          set({ frequency: oldFrequency });
+          throw e;
         }
       } catch (error) {
         console.error('Set frequency error:', error);
@@ -122,15 +91,13 @@ export const useRadioStore = create<RadioStore>()(
       set({ mode }); // Optimistic update
       
       try {
-        const response = await fetch('/api/radio/mode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode }),
-        });
-        
-        if (!response.ok) {
-          set({ mode: oldMode }); // Revert on error
-          throw new Error('Failed to set mode');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        try {
+          await ws.emitWithAck('radio:setMode', { mode });
+        } catch (e) {
+          set({ mode: oldMode });
+          throw e;
         }
       } catch (error) {
         console.error('Set mode error:', error);
@@ -143,15 +110,13 @@ export const useRadioStore = create<RadioStore>()(
       set({ power }); // Optimistic update
       
       try {
-        const response = await fetch('/api/radio/power', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ power }),
-        });
-        
-        if (!response.ok) {
-          set({ power: oldPower }); // Revert on error
-          throw new Error('Failed to set power');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        try {
+          await ws.emitWithAck('radio:setPower', { power });
+        } catch (e) {
+          set({ power: oldPower });
+          throw e;
         }
       } catch (error) {
         console.error('Set power error:', error);
@@ -164,15 +129,13 @@ export const useRadioStore = create<RadioStore>()(
       set({ vfo }); // Optimistic update
       
       try {
-        const response = await fetch('/api/radio/vfo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vfo }),
-        });
-        
-        if (!response.ok) {
-          set({ vfo: oldVFO }); // Revert on error
-          throw new Error('Failed to set VFO');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        try {
+          await ws.emitWithAck('radio:setVFO', { vfo });
+        } catch (e) {
+          set({ vfo: oldVFO });
+          throw e;
         }
       } catch (error) {
         console.error('Set VFO error:', error);
@@ -185,15 +148,13 @@ export const useRadioStore = create<RadioStore>()(
       set({ split }); // Optimistic update
       
       try {
-        const response = await fetch('/api/radio/split', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ split }),
-        });
-        
-        if (!response.ok) {
-          set({ split: oldSplit }); // Revert on error
-          throw new Error('Failed to set split');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        try {
+          await ws.emitWithAck('radio:setSplit', { split });
+        } catch (e) {
+          set({ split: oldSplit });
+          throw e;
         }
       } catch (error) {
         console.error('Set split error:', error);
@@ -206,15 +167,13 @@ export const useRadioStore = create<RadioStore>()(
       set({ ptt }); // Optimistic update
       
       try {
-        const response = await fetch('/api/radio/ptt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ptt }),
-        });
-        
-        if (!response.ok) {
-          set({ ptt: oldPTT }); // Revert on error
-          throw new Error('Failed to set PTT');
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        try {
+          await ws.emitWithAck('radio:setPTT', { ptt });
+        } catch (e) {
+          set({ ptt: oldPTT });
+          throw e;
         }
       } catch (error) {
         console.error('Set PTT error:', error);

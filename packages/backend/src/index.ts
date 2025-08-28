@@ -185,7 +185,7 @@ async function start() {
             const port = Number(payload?.port ?? 4532);
             await radio.connect(host, port);
             await radio.refreshState();
-            cb?.({ ok: true });
+            cb?.(null, { ok: true });
           } catch (e: any) {
             cb?.({ ok: false, error: e?.message || 'connect failed' });
           }
@@ -205,7 +205,7 @@ async function start() {
             const hz = Number(payload?.frequency);
             if (!Number.isFinite(hz) || hz <= 0) throw new Error('invalid frequency');
             await radio.setFrequency(hz);
-            cb?.({ ok: true });
+            cb?.(null, { ok: true });
           } catch (e: any) {
             cb?.({ ok: false, error: e?.message || 'setFrequency failed' });
           }
@@ -213,10 +213,11 @@ async function start() {
 
         socket.on("radio:setMode", async (payload: any, cb?: (res: any) => void) => {
           try {
-            const mode = payload?.mode;
+            const mode = payload?.mode as any;
             const bw = payload?.bandwidthHz ? Number(payload.bandwidthHz) : undefined;
+            if (!mode) throw new Error('mode required');
             await radio.setMode(mode, bw);
-            cb?.({ ok: true });
+            cb?.(null, { ok: true });
           } catch (e: any) {
             cb?.({ ok: false, error: e?.message || 'setMode failed' });
           }
@@ -227,7 +228,7 @@ async function start() {
             const percent = Number(payload?.power);
             if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new Error('invalid power');
             await radio.setPower(percent);
-            cb?.({ ok: true });
+            cb?.(null, { ok: true });
           } catch (e: any) {
             cb?.({ ok: false, error: e?.message || 'setPower failed' });
           }
@@ -237,12 +238,30 @@ async function start() {
           try {
             const ptt = !!payload?.ptt;
             await radio.setPtt(ptt);
-            cb?.({ ok: true });
+            cb?.(null, { ok: true });
           } catch (e: any) {
             cb?.({ ok: false, error: e?.message || 'setPTT failed' });
           }
         });
       }
+        // Optional: VFO and Split (if adapter supports)
+        socket.on("radio:setVFO", async (payload: any, cb?: (res: any) => void) => {
+          try {
+            // TODO: implement if adapter supports VFO
+            cb?.({ ok: false, error: 'VFO not supported yet' });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'setVFO failed' });
+          }
+        });
+
+        socket.on("radio:setSplit", async (payload: any, cb?: (res: any) => void) => {
+          try {
+            // TODO: implement if adapter supports split
+            cb?.({ ok: false, error: 'Split not supported yet' });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'setSplit failed' });
+          }
+        });
 
       socket.on("disconnect", (reason) => {
         app.log.info({ nsp, id: socket.id, reason }, "socket disconnected");
