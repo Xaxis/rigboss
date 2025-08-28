@@ -30,7 +30,8 @@ async function start() {
 
   // CORS for HTTP
   await app.register(cors, {
-    origin: config.CORS_ORIGIN ? config.CORS_ORIGIN.split(",") : true,
+    origin: config.CORS_ORIGIN === "*" ? true : (config.CORS_ORIGIN ? config.CORS_ORIGIN.split(",") : true),
+    credentials: true,
   });
 
   const registry = new ServiceRegistry();
@@ -166,7 +167,8 @@ async function start() {
   const io = new IOServer(app.server, {
     path: "/socket.io",
     cors: {
-      origin: config.CORS_ORIGIN ? config.CORS_ORIGIN.split(",") : true,
+      origin: config.CORS_ORIGIN === "*" ? true : (config.CORS_ORIGIN ? config.CORS_ORIGIN.split(",") : true),
+      credentials: true,
     },
   });
 
