@@ -1,0 +1,27 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import Screenshots from '../components/Screenshots.astro';
+import Installation from '../components/Installation.astro';
+import Documentation from '../components/Documentation.astro';
+import Community from '../components/Community.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/globals.css';
+---
+
+<Layout title="RigBoss - Professional Ham Radio Control Interface">
+  <div class="min-h-screen bg-background text-foreground">
+    <Header />
+    <main>
+      <Hero />
+      <Features />
+      <Screenshots />
+      <Installation />
+      <Documentation />
+      <Community />
+    </main>
+    <Footer />
+  </div>
+</Layout>

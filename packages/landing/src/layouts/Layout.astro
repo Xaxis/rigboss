@@ -1,0 +1,75 @@
+---
+export interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "Modern web-based interface for controlling ham radio rigs with advanced spectrum analysis and audio processing." } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={description} />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="keywords" content="ham radio, amateur radio, rig control, spectrum analyzer, rigctl, hamlib, IC-7300, FT-991A, rigboss" />
+    <meta name="author" content="RigBoss Team" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://rigboss.dev/" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="https://rigboss.dev/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://rigboss.dev/" />
+    <meta property="twitter:title" content={title} />
+    <meta property="twitter:description" content={description} />
+    <meta property="twitter:image" content="https://rigboss.dev/og-image.png" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://rigboss.dev/" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <title>{title}</title>
+  </head>
+  <body>
+    <slot />
+    
+    <!-- Theme toggle script -->
+    <script>
+      // Check for saved theme preference or default to system preference
+      const savedTheme = localStorage.getItem('theme');
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      
+      if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+      
+      // Theme toggle function
+      window.toggleTheme = function() {
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isDark) {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('theme', 'light');
+        } else {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('theme', 'dark');
+        }
+      }
+    </script>
+  </body>
+</html>
+
+<style>
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+</style>
