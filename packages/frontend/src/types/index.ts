@@ -135,6 +135,7 @@ export interface ConnectionState {
 // Configuration types
 export interface Config {
   backendUrl: string;
+  apiUrl: string;
   wsUrl: string;
   apiTimeout: number;
   reconnectInterval: number;

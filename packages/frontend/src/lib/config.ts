@@ -37,6 +37,7 @@ export function getConfig(): Config {
 
   return {
     backendUrl,
+    apiUrl: backendUrl, // API calls use the same URL as backend
     wsUrl,
     apiTimeout: 10000,
     reconnectInterval: 2000,
