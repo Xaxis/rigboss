@@ -24,19 +24,12 @@ export class RigctlCommandAdapter implements RigctlAdapter {
   }
 
   async connect(_host: string, _port: number): Promise<void> {
-    // Test connection by getting frequency with shorter timeout
+    // Test connection by getting frequency
     try {
       console.log(`🔧 Testing rigctl connection with model ${this.options.rigModel} on port ${this.options.rigPort}`);
 
-      // Use a shorter timeout for initial connection test
-      const originalTimeout = this.options.timeout;
-      this.options.timeout = 3000; // 3 second timeout for connection test
-
       const freq = await this.executeCommand('f');
       console.log(`🔧 Radio responded with frequency: ${freq.trim()} Hz`);
-
-      // Restore original timeout
-      this.options.timeout = originalTimeout;
 
       this.connected = true;
       console.log('✅ Radio connection successful');
