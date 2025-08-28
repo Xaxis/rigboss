@@ -1,0 +1,196 @@
+import { io, Socket } from 'socket.io-client';
+import type { WSEvent, ConnectionState } from '@/types';
+import { getConfig } from '@/lib/config';
+
+type EventHandler = (data: any) => void;
+
+class WebSocketService {
+  private socket: Socket | null = null;
+  private eventHandlers: Map<string, Set<EventHandler>> = new Map();
+  private connectionState: ConnectionState = {
+    connected: false,
+    reconnecting: false,
+    error: null,
+  };
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+
+  constructor(private url: string) {}
+
+  connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        this.socket = io(this.url, {
+          transports: ['websocket'],
+          timeout: 10000,
+          reconnection: true,
+          reconnectionAttempts: this.maxReconnectAttempts,
+          reconnectionDelay: 2000,
+        });
+
+        this.socket.on('connect', () => {
+          console.log('WebSocket connected');
+          this.connectionState = {
+            connected: true,
+            reconnecting: false,
+            error: null,
+          };
+          this.reconnectAttempts = 0;
+          this.notifyConnectionHandlers();
+          resolve();
+        });
+
+        this.socket.on('disconnect', (reason) => {
+          console.log('WebSocket disconnected:', reason);
+          this.connectionState = {
+            connected: false,
+            reconnecting: reason === 'io server disconnect' ? false : true,
+            error: reason,
+          };
+          this.notifyConnectionHandlers();
+        });
+
+        this.socket.on('connect_error', (error) => {
+          console.error('WebSocket connection error:', error);
+          this.connectionState = {
+            connected: false,
+            reconnecting: this.reconnectAttempts < this.maxReconnectAttempts,
+            error: error.message,
+          };
+          this.reconnectAttempts++;
+          this.notifyConnectionHandlers();
+          
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            reject(error);
+          }
+        });
+
+        this.socket.on('reconnect', (attemptNumber) => {
+          console.log('WebSocket reconnected after', attemptNumber, 'attempts');
+          this.connectionState = {
+            connected: true,
+            reconnecting: false,
+            error: null,
+          };
+          this.reconnectAttempts = 0;
+          this.notifyConnectionHandlers();
+        });
+
+        this.socket.on('reconnect_error', (error) => {
+          console.error('WebSocket reconnection error:', error);
+          this.connectionState = {
+            connected: false,
+            reconnecting: true,
+            error: error.message,
+          };
+          this.notifyConnectionHandlers();
+        });
+
+        this.socket.on('reconnect_failed', () => {
+          console.error('WebSocket reconnection failed');
+          this.connectionState = {
+            connected: false,
+            reconnecting: false,
+            error: 'Reconnection failed',
+          };
+          this.notifyConnectionHandlers();
+        });
+
+        // Handle all custom events
+        this.socket.onAny((eventName: string, data: any) => {
+          this.notifyEventHandlers(eventName, data);
+        });
+
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  disconnect(): void {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    this.connectionState = {
+      connected: false,
+      reconnecting: false,
+      error: null,
+    };
+    this.notifyConnectionHandlers();
+  }
+
+  emit(event: string, data?: any): void {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit(event, data);
+    } else {
+      console.warn('Cannot emit event: WebSocket not connected');
+    }
+  }
+
+  subscribe(event: string, handler: EventHandler): () => void {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, new Set());
+    }
+    this.eventHandlers.get(event)!.add(handler);
+
+    // Return unsubscribe function
+    return () => {
+      const handlers = this.eventHandlers.get(event);
+      if (handlers) {
+        handlers.delete(handler);
+        if (handlers.size === 0) {
+          this.eventHandlers.delete(event);
+        }
+      }
+    };
+  }
+
+  private notifyEventHandlers(event: string, data: any): void {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach(handler => {
+        try {
+          handler(data);
+        } catch (error) {
+          console.error(`Error in event handler for ${event}:`, error);
+        }
+      });
+    }
+  }
+
+  private notifyConnectionHandlers(): void {
+    this.notifyEventHandlers('connection_state', this.connectionState);
+  }
+
+  getConnectionState(): ConnectionState {
+    return { ...this.connectionState };
+  }
+
+  isConnected(): boolean {
+    return this.connectionState.connected;
+  }
+}
+
+let wsService: WebSocketService | null = null;
+
+export function getWebSocketService(): WebSocketService {
+  if (!wsService) {
+    const config = getConfig();
+    wsService = new WebSocketService(config.wsUrl);
+  }
+  return wsService;
+}
+
+export async function initializeWebSocket(): Promise<WebSocketService> {
+  const service = getWebSocketService();
+  await service.connect();
+  return service;
+}
+
+export function disconnectWebSocket(): void {
+  if (wsService) {
+    wsService.disconnect();
+    wsService = null;
+  }
+}
