@@ -148,12 +148,16 @@ async function main() {
     let backoff = 1500;
     // Try initial connect immediately
     for (;;) {
-      const ok = await radio.connect(cfg.RIGCTLD_HOST, cfg.RIGCTLD_PORT);
-      if (ok) {
-        log.info('Radio connected to rigctld');
-        return;
+      try {
+        const ok = await radio.connect(cfg.RIGCTLD_HOST, cfg.RIGCTLD_PORT);
+        if (ok) {
+          log.info({ target: { host: cfg.RIGCTLD_HOST, port: cfg.RIGCTLD_PORT } }, 'Radio connected to rigctld');
+          return;
+        }
+        log.warn(`Radio connect returned false, retrying in ${Math.floor(backoff)} ms`);
+      } catch (err: any) {
+        log.error({ err, target: { host: cfg.RIGCTLD_HOST, port: cfg.RIGCTLD_PORT } }, 'Radio connect failed');
       }
-      log.warn(`Radio connect failed, retrying in ${Math.floor(backoff)} ms`);
       await new Promise((r) => setTimeout(r, backoff));
       backoff = Math.min(backoff * 1.5, 15000);
     }
