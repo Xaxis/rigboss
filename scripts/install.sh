@@ -158,31 +158,16 @@ create_env_files() {
     
     # Backend .env
     if [ ! -f "packages/backend/.env" ]; then
-        cat > packages/backend/.env << EOF
-# RigBoss Backend Configuration
-PORT=3001
-HOST=0.0.0.0
-
-# Radio Configuration (edit as needed)
-RIGCTLD_HOST=127.0.0.1
-RIGCTLD_PORT=4532
-
-# Logging
-LOG_LEVEL=info
-NODE_ENV=production
-EOF
-        log_success "Backend .env created"
+        cp packages/backend/.env.example packages/backend/.env
+        log_success "Backend .env created from example"
     else
         log_info "Backend .env already exists"
     fi
 
     # Frontend .env
     if [ ! -f "packages/frontend/.env" ]; then
-        cat > packages/frontend/.env << EOF
-# RigBoss Frontend Configuration
-BACKEND_URL=http://localhost:3001
-EOF
-        log_success "Frontend .env created"
+        cp packages/frontend/.env.example packages/frontend/.env
+        log_success "Frontend .env created from example"
     else
         log_info "Frontend .env already exists"
     fi

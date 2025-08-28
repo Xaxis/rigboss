@@ -3,7 +3,7 @@ import type { Config } from '@/types';
 // Get configuration from environment variables and settings
 export function getConfig(): Config {
   // Try to get from environment first, then fall back to localStorage settings
-  let backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3001';
+  let backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   
   // Check if we have stored settings that override the environment
   if (typeof window !== 'undefined') {

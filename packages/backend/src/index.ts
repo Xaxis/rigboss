@@ -37,12 +37,12 @@ async function start() {
 
   // Instantiate services and register
   // Choose adapter based on environment
-  const useRealRadio = process.env.USE_REAL_RADIO === 'true';
+  const useRealRadio = config.USE_REAL_RADIO === 'true';
   const rigAdapter = useRealRadio
     ? new RigctlCommandAdapter({
-        rigModel: parseInt(process.env.RIG_MODEL || '3085'),
-        rigPort: process.env.RIG_PORT || '/dev/ttyUSB0',
-        rigSpeed: parseInt(process.env.RIG_SPEED || '19200'),
+        rigModel: config.RIG_MODEL,
+        rigPort: config.RIG_PORT,
+        rigSpeed: config.RIG_SPEED,
       })
     : new MockRigctlAdapter();
 

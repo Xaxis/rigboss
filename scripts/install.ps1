@@ -174,34 +174,17 @@ function Create-EnvironmentFiles {
     # Backend .env
     $backendEnvPath = "$InstallDir\packages\backend\.env"
     if (-not (Test-Path $backendEnvPath)) {
-        @"
-# RigBoss Backend Configuration
-PORT=3001
-HOST=0.0.0.0
-
-# Radio Configuration (edit as needed)
-USE_REAL_RADIO=false
-RIG_MODEL=3085
-RIG_PORT=COM3
-RIG_SPEED=19200
-
-# Logging
-LOG_LEVEL=info
-NODE_ENV=production
-"@ | Out-File -FilePath $backendEnvPath -Encoding UTF8
-        Write-Success "Backend .env created"
+        Copy-Item "$InstallDir\packages\backend\.env.example" $backendEnvPath
+        Write-Success "Backend .env created from example"
     } else {
         Write-Info "Backend .env already exists"
     }
-    
+
     # Frontend .env
     $frontendEnvPath = "$InstallDir\packages\frontend\.env"
     if (-not (Test-Path $frontendEnvPath)) {
-        @"
-# RigBoss Frontend Configuration
-BACKEND_URL=http://localhost:3001
-"@ | Out-File -FilePath $frontendEnvPath -Encoding UTF8
-        Write-Success "Frontend .env created"
+        Copy-Item "$InstallDir\packages\frontend\.env.example" $frontendEnvPath
+        Write-Success "Frontend .env created from example"
     } else {
         Write-Info "Frontend .env already exists"
     }
