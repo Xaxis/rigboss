@@ -176,6 +176,74 @@ async function start() {
     const namespace = io.of(nsp);
     namespace.on("connection", (socket) => {
       app.log.info({ nsp, id: socket.id }, "socket connected");
+
+      if (nsp === "/") {
+        // Radio command handlers over WebSocket
+        socket.on("radio:connect", async (payload: any = {}, cb?: (res: any) => void) => {
+          try {
+            const host = typeof payload?.host === 'string' ? payload.host : 'localhost';
+            const port = Number(payload?.port ?? 4532);
+            await radio.connect(host, port);
+            await radio.refreshState();
+            cb?.({ ok: true });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'connect failed' });
+          }
+        });
+
+        socket.on("radio:disconnect", async (_: any = {}, cb?: (res: any) => void) => {
+          try {
+            await radio.disconnect();
+            cb?.({ ok: true });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'disconnect failed' });
+          }
+        });
+
+        socket.on("radio:setFrequency", async (payload: any, cb?: (res: any) => void) => {
+          try {
+            const hz = Number(payload?.frequency);
+            if (!Number.isFinite(hz) || hz <= 0) throw new Error('invalid frequency');
+            await radio.setFrequency(hz);
+            cb?.({ ok: true });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'setFrequency failed' });
+          }
+        });
+
+        socket.on("radio:setMode", async (payload: any, cb?: (res: any) => void) => {
+          try {
+            const mode = payload?.mode;
+            const bw = payload?.bandwidthHz ? Number(payload.bandwidthHz) : undefined;
+            await radio.setMode(mode, bw);
+            cb?.({ ok: true });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'setMode failed' });
+          }
+        });
+
+        socket.on("radio:setPower", async (payload: any, cb?: (res: any) => void) => {
+          try {
+            const percent = Number(payload?.power);
+            if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new Error('invalid power');
+            await radio.setPower(percent);
+            cb?.({ ok: true });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'setPower failed' });
+          }
+        });
+
+        socket.on("radio:setPTT", async (payload: any, cb?: (res: any) => void) => {
+          try {
+            const ptt = !!payload?.ptt;
+            await radio.setPtt(ptt);
+            cb?.({ ok: true });
+          } catch (e: any) {
+            cb?.({ ok: false, error: e?.message || 'setPTT failed' });
+          }
+        });
+      }
+
       socket.on("disconnect", (reason) => {
         app.log.info({ nsp, id: socket.id, reason }, "socket disconnected");
       });
@@ -234,6 +302,7 @@ async function start() {
       }, 2000);
     }
   } else {
+      // @TODO - REMOVE ALL MOCK MODE ASPECTS OF THE STACK
     // Mock mode with changing data
     setInterval(() => {
       radio.emit(EVENTS.RADIO_STATE, {

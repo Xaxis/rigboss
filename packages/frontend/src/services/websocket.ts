@@ -116,15 +116,27 @@ class WebSocketService {
     // Listen for radio state updates (matches backend EVENTS.RADIO_STATE)
     this.socket.on('radio_state', (data: any) => {
       console.log('📻 Frontend received radio state:', data);
-      const { useRadioStore } = require('../stores/radio');
-      useRadioStore.getState().updateFromBackend(data);
+      try {
+        // Direct import avoids require in browser
+        import('../stores/radio').then(({ useRadioStore }) => {
+          useRadioStore.getState().updateFromBackend({
+            connected: !!data.connected,
+            frequency: data.frequencyHz ?? data.frequency ?? 0,
+            mode: data.mode,
+            power: data.power ?? 0,
+            model: data.rigModel ?? '',
+          });
+        });
+      } catch (e) {
+        console.error('Failed to update radio store from WS data', e);
+      }
     });
 
     // Listen for connection status updates
     this.socket.on('connection_status', (data: any) => {
-      console.log('📻 Received connection status:', data);
-      const { useRadioStore } = require('../stores/radio');
-      useRadioStore.getState().updateFromBackend({ connected: data.connected });
+      import('../stores/radio').then(({ useRadioStore }) => {
+        useRadioStore.getState().updateFromBackend({ connected: !!data.connected });
+      });
     });
   }
 
