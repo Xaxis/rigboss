@@ -283,7 +283,6 @@ async function main() {
 
   audioService.on(EVENTS.AUDIO_RX_DATA, (data) => {
     // Stream RX audio data to all connected clients
-    console.log(`🔊 WEBSOCKET RELAY: Sending ${data.data?.length || 0} bytes to clients`);
     io.emit(EVENTS.AUDIO_RX_DATA, data);
   });
 

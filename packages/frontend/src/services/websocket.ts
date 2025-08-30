@@ -221,23 +221,13 @@ class WebSocketService {
 
     // Listen for RX audio data and play it
     this.socket.on('audio:rx_data', (data: any) => {
-      console.log('🔊 FRONTEND RECEIVED AUDIO DATA:', data?.data?.length || 0, 'bytes');
       import('../stores/audio').then(({ useAudioStore }) => {
         const audioStore = useAudioStore.getState();
-        console.log('🔊 AUDIO STORE STATE:', {
-          hasContext: !!audioStore.audioContext,
-          volume: audioStore.outputLevel,
-          muted: audioStore.muted,
-          connected: audioStore.connected
-        });
 
         if (audioStore.audioContext && audioStore.outputLevel > 0 && !audioStore.muted) {
-          console.log('🔊 ATTEMPTING TO PLAY AUDIO');
-          // Convert Buffer to ArrayBuffer
+          // Convert Array back to ArrayBuffer
           const buffer = new Uint8Array(data.data).buffer;
           this.playAudioData(buffer, audioStore.audioContext, audioStore.outputLevel / 100);
-        } else {
-          console.log('🔊 AUDIO BLOCKED - conditions not met');
         }
       }).catch(() => {});
     });
