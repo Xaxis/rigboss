@@ -30,6 +30,7 @@ export interface SpectrumFrame {
 interface SpectrumConfig {
   sampleRate?: number; // Hz
   device?: string; // ALSA device, e.g., 'default' or 'hw:1,0'
+}
 
 function listAlsaCards(): Array<{ index: number; name: string }> {
   try {
@@ -38,7 +39,11 @@ function listAlsaCards(): Array<{ index: number; name: string }> {
     const out: Array<{ index: number; name: string }> = [];
     for (const line of lines) {
       const m = line.match(/^\s*(\d+)\s*\[([^\]]+)\]/);
-      if (m) out.push({ index: parseInt(m[1], 10), name: m[2].trim() });
+      if (m && m[1] && m[2]) {
+        const idx = Number(m[1]);
+        const name = String(m[2] || '').trim();
+        out.push({ index: idx, name });
+      }
     }
     return out;
   } catch {
@@ -46,7 +51,7 @@ function listAlsaCards(): Array<{ index: number; name: string }> {
   }
 }
 
-}
+
 
 // Simple Hann window
 function hannWindow(N: number): Float32Array {
@@ -100,6 +105,7 @@ export class SpectrumService extends EventEmitter {
 
   getSettings(): SpectrumSettings {
     return { ...this.settings };
+  }
 
   private buildDeviceCandidates(): string[] {
     const candidates: string[] = [];
@@ -183,8 +189,6 @@ export class SpectrumService extends EventEmitter {
     });
 
     return true;
-  }
-
   }
 
   applySettings(patch: Partial<SpectrumSettings>): SpectrumSettings {
