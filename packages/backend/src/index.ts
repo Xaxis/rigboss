@@ -160,6 +160,9 @@ async function main() {
         await radioService.tune(ms);
         callback?.(null, { success: true });
       } catch (error: any) {
+        callback?.(error.message, null);
+      }
+    });
 
     // Spectrum settings via WS
     socket.on('spectrum:settings:set', (payload, callback) => {
@@ -168,9 +171,6 @@ async function main() {
         callback?.(null, { success: true, settings: applied });
       } catch (e: any) {
         callback?.(e.message || 'Failed to apply spectrum settings', null);
-      }
-    });
-        callback?.(error.message, null);
       }
     });
   });
@@ -190,11 +190,27 @@ async function main() {
 
   radioService.on(EVENTS.RADIO_CAPABILITIES, (data) => {
     io.emit(EVENTS.RADIO_CAPABILITIES, data);
+
+  // Spectrum event relay
+  spectrumService.on(EVENTS.SPECTRUM_FRAME, (data) => {
+    io.emit(EVENTS.SPECTRUM_FRAME, data);
+  });
+  spectrumService.on(EVENTS.SPECTRUM_SETTINGS, (data) => {
+    io.emit(EVENTS.SPECTRUM_SETTINGS, data);
+  });
   });
 
   radioService.on(EVENTS.RADIO_ERROR, (data) => {
     io.emit(EVENTS.RADIO_ERROR, data);
   });
+
+  // Start spectrum after radio connected so center coupling can work
+  try {
+    spectrumService.start();
+    fastify.log.info('Spectrum service started');
+  } catch (error) {
+    fastify.log.warn('Spectrum service failed to start');
+  }
 
   audioService.on(EVENTS.AUDIO_LEVEL, (data) => {
     io.emit(EVENTS.AUDIO_LEVEL, data);
