@@ -191,32 +191,6 @@ export class AudioService extends EventEmitter {
     // The audio streaming will be handled by connecting to spectrum service events
     // This avoids device conflicts since only one process can capture from audio device
     return;
-
-      this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {
-        this.rxAudioBuffer = Buffer.concat([this.rxAudioBuffer, chunk]);
-        // Convert Buffer to Array for WebSocket transmission
-        this.emit(EVENTS.AUDIO_RX_DATA, { data: Array.from(chunk) });
-      });
-
-      this.rxAudioProc.stderr.on('data', (data) => {
-        console.log('🔊 Audio stderr:', data.toString());
-      });
-
-      this.rxAudioProc.on('error', (err) => {
-        console.error('🔊 RX audio process error:', err);
-        this.emit(EVENTS.AUDIO_ERROR, { error: 'RX audio failed' });
-      });
-
-      this.rxAudioProc.on('close', (code) => {
-        console.log(`🔊 RX audio process closed with code: ${code}`);
-        this.rxAudioProc = null;
-      });
-
-      console.log('🔊 RX audio process started successfully');
-    } catch (error) {
-      console.error('🔊 Failed to start RX audio:', error);
-      throw error;
-    }
   }
 
   private stopRXAudio(): void {
