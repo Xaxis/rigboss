@@ -184,25 +184,25 @@ export class AudioService extends EventEmitter {
   }
 
   private async startRXAudio(): Promise<void> {
-    // Use the SAME device that spectrum uses successfully!
+    // Use the EXACT SAME approach as spectrum analyzer!
     const audioDevice = 'sysdefault:CARD=CODEC';
 
     console.log(`🔊 Starting RX audio from: ${audioDevice}`);
 
     try {
-      const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
+      // Use arecord (same as spectrum) instead of ffmpeg
       const args = [
-        '-f', 'alsa',
-        '-i', audioDevice,
-        '-ac', '1',  // Mono for radio audio
-        '-ar', String(this.config.sampleRate),
-        '-acodec', 'pcm_s16le',
-        '-f', 's16le',
-        'pipe:1',
+        '-D', audioDevice,
+        '-f', 'S16_LE',
+        '-r', String(this.config.sampleRate),
+        '-c', '1',  // Mono
+        '-q',       // Quiet
+        '-t', 'raw',
+        '-'         // Output to stdout
       ];
 
-      console.log('🔊 Audio capture args:', args.join(' '));
-      this.rxAudioProc = spawn(bin, args);
+      console.log('🔊 Audio capture args (arecord):', args.join(' '));
+      this.rxAudioProc = spawn('arecord', args);
 
       this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {
         console.log(`🔊 Audio data captured: ${chunk.length} bytes`);
