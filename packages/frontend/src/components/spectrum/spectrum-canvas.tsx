@@ -1,326 +1,403 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { useSpectrumFrame, useSpectrumSettings, useSpectrumMode } from '@/stores/spectrum';
-import { dbToColor } from '@/lib/utils';
-import { useRadioStore } from '@/stores/radio';
+import React, { useRef, useEffect, useCallback } from 'react';
+import type { SpectrumFrame, SpectrumSettings, SpectrumMode } from '@/types';
 
-export function SpectrumCanvas() {
-  const spectrumRef = useRef<HTMLCanvasElement>(null);
-  const waterfallRef = useRef<HTMLCanvasElement>(null);
-  const frame = useSpectrumFrame();
-  const settings = useSpectrumSettings();
-  const mode = useSpectrumMode();
-  const tunedHz = useRadioStore((s) => s.frequencyHz);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
+interface SpectrumCanvasProps {
+  frame: SpectrumFrame | null;
+  settings: SpectrumSettings;
+  mode: SpectrumMode;
+  width: number;
+  height: number;
+  variant: 'full' | 'mini' | 'embedded' | 'fullscreen';
+}
+
+
+
+export function SpectrumCanvas({
+  frame,
+  settings,
+  mode,
+  width,
+  height,
+  variant
+}: SpectrumCanvasProps) {
+  const spectrumCanvasRef = useRef<HTMLCanvasElement>(null);
+  const waterfallCanvasRef = useRef<HTMLCanvasElement>(null);
+  const traceHistoryRef = useRef<number[][]>([]);
+
+  // Color palettes
+  const colorPalettes = {
+    viridis: (intensity: number) => {
+      const r = Math.floor(68 + 187 * intensity);
+      const g = Math.floor(1 + 254 * intensity);
+      const b = Math.floor(84 + 171 * intensity);
+      return `rgb(${r},${g},${b})`;
+    },
+    inferno: (intensity: number) => {
+      const r = Math.floor(0 + 255 * intensity);
+      const g = Math.floor(0 + 255 * Math.max(0, intensity - 0.25) * 1.33);
+      const b = Math.floor(0 + 255 * Math.max(0, intensity - 0.5) * 2);
+      return `rgb(${r},${g},${b})`;
+    },
+    plasma: (intensity: number) => {
+      const r = Math.floor(13 + 242 * intensity);
+      const g = Math.floor(8 + 247 * Math.sin(intensity * Math.PI));
+      const b = Math.floor(135 + 120 * intensity);
+      return `rgb(${r},${g},${b})`;
+    },
+    turbo: (intensity: number) => {
+      const r = Math.floor(48 + 207 * intensity);
+      const g = Math.floor(18 + 237 * Math.sin(intensity * Math.PI * 0.8));
+      const b = Math.floor(59 + 196 * (1 - intensity));
+      return `rgb(${r},${g},${b})`;
+    }
+  };
+
+  const getWaterfallColor = useCallback((dbValue: number) => {
+    const palette = colorPalettes[settings.colorMap as keyof typeof colorPalettes] || colorPalettes.viridis;
+    const minDb = settings.refLevel - 80;
+    const maxDb = settings.refLevel;
+    const intensity = Math.max(0, Math.min(1, (dbValue - minDb) / (maxDb - minDb)));
+    return palette(intensity * settings.waterfallIntensity);
+  }, [settings.colorMap, settings.refLevel, settings.waterfallIntensity]);
+
+  // Process trace based on mode
+  const processTrace = useCallback((bins: number[]) => {
+    switch (settings.traceMode) {
+      case 'max_hold':
+        if (traceHistoryRef.current.length === 0) {
+          traceHistoryRef.current = [bins];
+        } else {
+          const maxTrace = traceHistoryRef.current[0];
+          for (let i = 0; i < bins.length; i++) {
+            maxTrace[i] = Math.max(maxTrace[i] || -Infinity, bins[i]);
+          }
+        }
+        return traceHistoryRef.current[0];
+      
+      case 'average':
+        traceHistoryRef.current.push(bins);
+        if (traceHistoryRef.current.length > settings.averaging) {
+          traceHistoryRef.current.shift();
+        }
+        const avgTrace = new Array(bins.length).fill(0);
+        for (const trace of traceHistoryRef.current) {
+          for (let i = 0; i < bins.length; i++) {
+            avgTrace[i] += trace[i] / traceHistoryRef.current.length;
+          }
+        }
+        return avgTrace;
+      
+      case 'peak_hold':
+        traceHistoryRef.current.push(bins);
+        if (traceHistoryRef.current.length > 50) { // Hold for 50 frames
+          traceHistoryRef.current.shift();
+        }
+        const peakTrace = new Array(bins.length).fill(-Infinity);
+        for (const trace of traceHistoryRef.current) {
+          for (let i = 0; i < bins.length; i++) {
+            peakTrace[i] = Math.max(peakTrace[i], trace[i]);
+          }
+        }
+        return peakTrace;
+      
+      default: // 'live'
+        return bins;
+    }
+  }, [settings.traceMode, settings.averaging]);
+
+  // UNIFIED FREQUENCY MAPPING FUNCTION
+  const getFrequencyMapping = useCallback((frame: SpectrumFrame) => {
+    // Data frequency range (what the backend provides)
+    const dataStartHz = frame.startHz;
+    const dataEndHz = dataStartHz + frame.binSizeHz * frame.bins.length;
+
+    // Display frequency range (what user wants to see)
+    const displayStartHz = settings.centerHz - settings.spanHz / 2;
+    const displayEndHz = settings.centerHz + settings.spanHz / 2;
+
+    // Calculate overlap between data and display ranges
+    const overlapStartHz = Math.max(dataStartHz, displayStartHz);
+    const overlapEndHz = Math.min(dataEndHz, displayEndHz);
+    const hasOverlap = overlapStartHz < overlapEndHz;
+
+    return {
+      dataStartHz,
+      dataEndHz,
+      displayStartHz,
+      displayEndHz,
+      overlapStartHz,
+      overlapEndHz,
+      hasOverlap,
+      binSizeHz: frame.binSizeHz
+    };
+  }, [settings.centerHz, settings.spanHz]);
 
   // Render spectrum
-  useEffect(() => {
-    if (!frame || !spectrumRef.current) return;
-
-    const canvas = spectrumRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Size
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    if (canvas.width !== rect.width * dpr) canvas.width = rect.width * dpr;
-    if (canvas.height !== rect.height * dpr) canvas.height = rect.height * dpr;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-
-    const width = rect.width;
-    const height = rect.height;
-
-    // Clear
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw spectrum curve
-    drawSpectrum(ctx, frame, settings, width, height);
-
-    // Grid & markers
-    drawFrequencyGrid(ctx, settings, width, height, frame);
-    drawCenterAndTunedMarkers(ctx, settings, width, height, frame, tunedHz);
-
-    // Cursor
-    if (mousePos) drawCursorInfo(ctx, mousePos, settings, width, height);
-  }, [frame, settings, mode, mousePos, tunedHz]);
-
-  // Render waterfall
-  useEffect(() => {
-    if (!frame || !waterfallRef.current) return;
-    const canvas = waterfallRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const targetW = Math.max(1, Math.floor(rect.width * dpr));
-    const targetH = Math.max(1, Math.floor(rect.height * dpr));
-    if (canvas.width !== targetW) canvas.width = targetW;
-    if (canvas.height !== targetH) canvas.height = targetH;
-
-    // Scroll existing image up by 1 row
-    const row = 1; // px per frame; could be adjustable by speed
-    ctx.drawImage(canvas, 0, 0, targetW, targetH - row, 0, row, targetW, targetH - row);
-
-    // Draw new row at top using current bins
-    const bins = frame.bins as number[];
-    const img = ctx.createImageData(targetW, row);
-    const buf = img.data;
-    for (let x = 0; x < targetW; x++) {
-      const i = Math.floor((x / targetW) * bins.length);
-      const color = dbToColor(bins[i], settings.colorMap);
-      const r = parseInt(color.slice(1, 3), 16);
-      const g = parseInt(color.slice(3, 5), 16);
-      const b = parseInt(color.slice(5, 7), 16);
-      for (let y = 0; y < row; y++) {
-        const idx = (y * targetW + x) * 4;
-        buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  }, [frame, settings]);
-
-  const drawSpectrum = (
+  const renderSpectrum = useCallback((
     ctx: CanvasRenderingContext2D,
-    frame: any,
-    settings: any,
+    frame: SpectrumFrame,
     width: number,
     height: number
   ) => {
-    const bins = frame?.bins as number[] | undefined;
-    if (!bins || bins.length === 0) return;
+    if (!frame.bins || frame.bins.length === 0) return;
 
+    const processedBins = processTrace(frame.bins);
+    const minDb = settings.refLevel - 80;
     const maxDb = settings.refLevel;
-    const minDb = maxDb - 80; // 80dB dynamic range
+    const dbRange = maxDb - minDb;
+    const freqMap = getFrequencyMapping(frame);
 
-    // Anti-aliased spectrum line
-    ctx.strokeStyle = '#00ff00';
-    ctx.lineWidth = 1.5;
+    // Clear
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw grid if enabled
+    if (settings.showGrid && variant !== 'mini') {
+      drawGrid(ctx, frame, width, height, minDb, maxDb);
+    }
+
+    // Draw spectrum trace - SIMPLE: STRETCH DATA ACROSS FULL WIDTH
+    ctx.strokeStyle = settings.spectrumColor;
+    ctx.lineWidth = variant === 'mini' ? 1 : 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
 
-    for (let i = 0; i < bins.length; i++) {
-      const x = (i / bins.length) * width;
-      const normalizedDb = Math.max(0, Math.min(1, (bins[i] - minDb) / (maxDb - minDb)));
-      const y = height - (normalizedDb * height);
+    // Draw spectrum trace - BACKEND HANDLES FREQUENCY MAPPING
+    ctx.strokeStyle = settings.spectrumColor;
+    ctx.lineWidth = variant === 'mini' ? 1 : 1.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
 
-      if (i === 0) {
+    let hasStarted = false;
+
+    // Backend already maps bins to the correct frequency range
+    // Just draw bins across full width
+    for (let i = 0; i < processedBins.length; i++) {
+      const x = (i / (processedBins.length - 1)) * width;
+      const dbValue = processedBins[i];
+      const normalizedDb = Math.max(0, Math.min(1, (dbValue - minDb) / dbRange));
+      const y = Math.max(0, Math.min(height, height - (normalizedDb * height)));
+
+      if (!hasStarted) {
         ctx.moveTo(x, y);
+        hasStarted = true;
       } else {
         ctx.lineTo(x, y);
       }
     }
     ctx.stroke();
 
-    // Fill under curve
-    ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
-    ctx.lineTo(width, height);
-    ctx.lineTo(0, height);
-    ctx.closePath();
-    ctx.fill();
-  };
+    // Fill under curve for better visibility
+    if (variant !== 'mini') {
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, settings.spectrumColor + '40');
+      gradient.addColorStop(1, settings.spectrumColor + '10');
+      ctx.fillStyle = gradient;
+      ctx.lineTo(width, height);
+      ctx.lineTo(0, height);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }, [settings, variant, processTrace, getFrequencyMapping]);
 
-  const drawFrequencyGrid = (
+  // Render waterfall
+  const renderWaterfall = useCallback((
     ctx: CanvasRenderingContext2D,
-    settings: any,
+    frame: SpectrumFrame,
+    width: number,
+    height: number
+  ) => {
+    if (!frame.bins || frame.bins.length === 0) return;
+
+    // Get actual canvas dimensions (accounting for device pixel ratio)
+    const actualWidth = ctx.canvas.width;
+    const actualHeight = ctx.canvas.height;
+
+    // Scroll existing content down by 1 pixel
+    if (actualHeight > 1) {
+      const imageData = ctx.getImageData(0, 0, actualWidth, actualHeight - 1);
+      ctx.putImageData(imageData, 0, 1);
+    }
+
+    // Draw new line at top - BACKEND HANDLES FREQUENCY MAPPING
+    const imageData = ctx.createImageData(actualWidth, 1);
+    const data = imageData.data;
+
+    for (let x = 0; x < actualWidth; x++) {
+      // Backend already maps bins to correct frequency range
+      // Just map pixels to bins across full width
+      const binIndex = Math.floor((x / actualWidth) * frame.bins.length);
+      const dbValue = frame.bins[binIndex] || (settings.refLevel - 80);
+      const color = getWaterfallColor(dbValue);
+
+      const rgb = color.match(/\d+/g);
+      if (rgb) {
+        const idx = x * 4;
+        data[idx] = parseInt(rgb[0]);     // R
+        data[idx + 1] = parseInt(rgb[1]); // G
+        data[idx + 2] = parseInt(rgb[2]); // B
+        data[idx + 3] = 255;              // A
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+  }, [getWaterfallColor, settings.refLevel, settings.centerHz, settings.spanHz, getFrequencyMapping]);
+
+  // Draw grid
+  const drawGrid = useCallback((
+    ctx: CanvasRenderingContext2D,
+    frame: SpectrumFrame,
     width: number,
     height: number,
-    frame: any
+    minDb: number,
+    maxDb: number
   ) => {
     const startHz = frame.startHz;
     const endHz = startHz + frame.binSizeHz * frame.bins.length;
-    const hzPerPixel = (endHz - startHz) / width;
+    const spanHz = endHz - startHz;
 
-    // Vertical grid lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = settings.gridColor;
+    ctx.lineWidth = 0.5;
+    ctx.font = '10px monospace';
+    ctx.fillStyle = settings.gridColor;
 
-    const gridSpacing = (endHz - startHz) / 10;
-    for (let i = 0; i <= 10; i++) {
-      const hz = startHz + i * gridSpacing;
-      const x = (hz - startHz) / hzPerPixel;
+    // Vertical frequency grid
+    const freqDivisions = variant === 'mini' ? 5 : 10;
+    for (let i = 0; i <= freqDivisions; i++) {
+      const freq = startHz + (i / freqDivisions) * spanHz;
+      const x = (i / freqDivisions) * width;
 
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
 
-      // Frequency labels
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'center';
-      const freqLabel = (hz / 1000000).toFixed(3) + ' MHz';
-      ctx.fillText(freqLabel, x, height - 5);
+      if (variant !== 'mini') {
+        const freqMHz = freq / 1000000;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${freqMHz.toFixed(3)}`, x, height - 5);
+      }
     }
 
-    // Horizontal grid lines (dB scale)
-    const dbRange = 80;
-    for (let db = -80; db <= 0; db += 10) {
-      const y = height - ((db + 80) / dbRange) * height;
+    // Horizontal dB grid
+    const dbDivisions = variant === 'mini' ? 4 : 8;
+    for (let i = 0; i <= dbDivisions; i++) {
+      const db = minDb + (i / dbDivisions) * (maxDb - minDb);
+      const y = height - (i / dbDivisions) * height;
 
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
 
-      // dB labels
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${db} dB`, 5, y - 2);
+      if (variant !== 'mini') {
+        ctx.textAlign = 'left';
+        ctx.fillText(`${db.toFixed(0)}`, 5, y - 2);
+      }
     }
-  };
+  }, [settings.gridColor, variant]);
 
-  const drawCenterAndTunedMarkers = (
-    ctx: CanvasRenderingContext2D,
-    settings: any,
-    width: number,
-    height: number,
-    frame: any,
-    tunedHz?: number
-  ) => {
-    const startHz = frame.startHz;
-    const endHz = startHz + frame.binSizeHz * frame.bins.length;
-    const hzPerPixel = (endHz - startHz) / width;
+  // Spectrum canvas size effect
+  useEffect(() => {
+    if (!spectrumCanvasRef.current || width === 0 || height === 0) return;
+    if (mode === 'waterfall') return;
 
-    // Center marker (red)
-    const centerHz = settings.centerHz;
-    if (centerHz >= startHz && centerHz <= endHz) {
-      const x = (centerHz - startHz) / hzPerPixel;
-      ctx.strokeStyle = '#ff4444';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    const canvas = spectrumCanvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const displayHeight = mode === 'combined' ? height / 2 : height;
 
-      // Label
-      ctx.fillStyle = '#ff4444';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('CENTER', x, 15);
+    const targetWidth = width * dpr;
+    const targetHeight = displayHeight * dpr;
+
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${displayHeight}px`;
+
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.scale(dpr, dpr);
+      }
+    }
+  }, [width, height, mode]);
+
+  // Spectrum rendering effect
+  useEffect(() => {
+    if (!frame || !spectrumCanvasRef.current || width === 0 || height === 0) return;
+    if (mode === 'waterfall') return;
+
+    const canvas = spectrumCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const displayHeight = mode === 'combined' ? height / 2 : height;
+    renderSpectrum(ctx, frame, width, displayHeight);
+  }, [frame, settings.showGrid, settings.gridColor, settings.spectrumColor, settings.traceMode, settings.refLevel, settings.centerHz, settings.spanHz, getFrequencyMapping]);
+
+  // Waterfall canvas effect
+  useEffect(() => {
+    if (!frame || !waterfallCanvasRef.current || width === 0 || height === 0) return;
+    if (mode === 'spectrum') return;
+
+    const canvas = waterfallCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size with device pixel ratio
+    const dpr = window.devicePixelRatio || 1;
+    const displayHeight = mode === 'combined' ? height / 2 : height;
+
+    // Only resize canvas if dimensions changed
+    const targetWidth = width * dpr;
+    const targetHeight = displayHeight * dpr;
+
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${displayHeight}px`;
+
+      // Reset transform and apply scaling
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+
+      // Clear canvas when resizing
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, displayHeight);
     }
 
-    // Tuned frequency marker (yellow)
-    if (tunedHz && tunedHz >= startHz && tunedHz <= endHz) {
-      const x = (tunedHz - startHz) / hzPerPixel;
-      ctx.strokeStyle = '#ffff44';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    renderWaterfall(ctx, frame, width, displayHeight);
+  }, [frame, settings, mode, width, height, renderWaterfall]);
 
-      // Label
-      ctx.fillStyle = '#ffff44';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('TUNED', x, 30);
-    }
-  };
-
-  const drawCursorInfo = (
-    ctx: CanvasRenderingContext2D,
-    mousePos: { x: number; y: number },
-    settings: any,
-    width: number,
-    height: number
-  ) => {
-    if (!frame) return;
-    const startHz = frame.startHz;
-    const endHz = startHz + frame.binSizeHz * frame.bins.length;
-    const hzPerPixel = (endHz - startHz) / width;
-    const frequency = startHz + mousePos.x * hzPerPixel;
-
-    // Crosshair
-    ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
-
-    ctx.beginPath();
-    ctx.moveTo(mousePos.x, 0);
-    ctx.lineTo(mousePos.x, height);
-    ctx.moveTo(0, mousePos.y);
-    ctx.lineTo(width, mousePos.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Info box
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-    ctx.fillRect(mousePos.x + 10, mousePos.y - 35, 140, 30);
-
-    ctx.fillStyle = 'white';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${(frequency / 1000000).toFixed(3)} MHz`, mousePos.x + 15, mousePos.y - 15);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const rect = spectrumRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    setMousePos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    });
-  };
-
-  const handleMouseLeave = () => {
-    setMousePos(null);
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
-    setZoomLevel(prev => Math.max(0.1, Math.min(10, prev * zoomFactor)));
-  };
+  // Clear trace history when trace mode changes
+  useEffect(() => {
+    traceHistoryRef.current = [];
+  }, [settings.traceMode]);
 
   const spectrumHeight = mode === 'combined' ? '50%' : '100%';
   const waterfallHeight = mode === 'combined' ? '50%' : '100%';
-  const showSpectrum = mode === 'spectrum' || mode === 'combined';
-  const showWaterfall = mode === 'waterfall' || mode === 'combined';
 
   return (
-    <div className="relative w-full h-96 bg-black rounded-lg overflow-hidden flex flex-col">
-      {/* Spectrum canvas */}
-      {showSpectrum && (
+    <div className="absolute inset-0 flex flex-col">
+      {/* Spectrum Canvas */}
+      {(mode === 'spectrum' || mode === 'combined') && (
         <canvas
-          ref={spectrumRef}
-          className="w-full cursor-crosshair"
+          ref={spectrumCanvasRef}
+          className="block"
           style={{ height: spectrumHeight }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onWheel={handleWheel}
         />
       )}
 
-      {/* Waterfall canvas */}
-      {showWaterfall && (
+      {/* Waterfall Canvas */}
+      {(mode === 'waterfall' || mode === 'combined') && (
         <canvas
-          ref={waterfallRef}
-          className="w-full"
+          ref={waterfallCanvasRef}
+          className="block"
           style={{ height: waterfallHeight }}
         />
-      )}
-
-      {/* Mode indicator */}
-      <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 rounded text-white text-xs font-mono">
-        {mode.toUpperCase()}
-      </div>
-
-      {/* Zoom indicator */}
-      {zoomLevel !== 1 && (
-        <div className="absolute top-2 right-2 px-2 py-1 bg-black/70 rounded text-white text-xs font-mono">
-          {zoomLevel.toFixed(1)}x
-        </div>
       )}
     </div>
   );

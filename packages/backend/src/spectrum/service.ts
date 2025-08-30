@@ -255,7 +255,12 @@ export class SpectrumService extends EventEmitter {
 
   applySettings(patch: Partial<SpectrumSettings>): SpectrumSettings {
     const before = this.settings;
+    console.log('🎛️ Backend applying settings:', patch);
+    console.log('🎛️ Before:', { centerHz: before.centerHz, spanHz: before.spanHz });
+
     this.settings = { ...before, ...patch } as SpectrumSettings;
+
+    console.log('🎛️ After:', { centerHz: this.settings.centerHz, spanHz: this.settings.spanHz });
 
     if (patch.fftSize && patch.fftSize !== before.fftSize) {
       this.fft = new FFT(this.settings.fftSize);

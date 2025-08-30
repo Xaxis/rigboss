@@ -179,8 +179,18 @@ class WebSocketService {
             provider: data.provider,
             fps: data.fps,
           };
+
+          // Only update backend-controlled settings, not user display settings
+          const backendSettings: any = {};
+          if (data.settings.centerHz !== undefined) backendSettings.centerHz = data.settings.centerHz;
+          if (data.settings.spanHz !== undefined) backendSettings.spanHz = data.settings.spanHz;
+          if (data.settings.fftSize !== undefined) backendSettings.fftSize = data.settings.fftSize;
+          if (data.settings.averaging !== undefined) backendSettings.averaging = data.settings.averaging;
+          if (data.settings.refLevel !== undefined) backendSettings.refLevel = data.settings.refLevel;
+          if (data.settings.coupled !== undefined) backendSettings.coupled = data.settings.coupled;
+
           useSpectrumStore.setState((prev: any) => ({
-            settings: { ...prev.settings, ...data.settings },
+            settings: { ...prev.settings, ...backendSettings },
             connected: data.available !== false ? true : prev.connected,
             meta,
           }));

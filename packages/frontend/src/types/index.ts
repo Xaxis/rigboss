@@ -145,6 +145,7 @@ export interface RadioCapabilities {
 // Spectrum types
 export type SpectrumSource = 'AUTO' | 'IF' | 'IQ' | 'PCM';
 export type SpectrumMode = 'spectrum' | 'waterfall' | 'combined';
+export type SpectrumTraceMode = 'live' | 'max_hold' | 'average' | 'peak_hold';
 
 export interface SpectrumSettings {
   centerHz: number;
@@ -153,6 +154,15 @@ export interface SpectrumSettings {
   averaging: number;
   refLevel: number;
   colorMap: string;
+  showGrid: boolean;
+  gridColor: string;
+  spectrumColor: string;
+  traceMode: SpectrumTraceMode;
+  waterfallSpeed: number;
+  waterfallIntensity: number;
+  autoScale: boolean;
+  coupled: boolean;
+  fps: number;
 }
 
 export interface SpectrumFrame {

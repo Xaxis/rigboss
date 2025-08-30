@@ -21,6 +21,15 @@ const initialSettings: SpectrumSettings = {
   averaging: 3,
   refLevel: 0,
   colorMap: 'viridis',
+  showGrid: true,
+  gridColor: '#333333',
+  spectrumColor: '#00ff41',
+  traceMode: 'live',
+  waterfallSpeed: 1,
+  waterfallIntensity: 1,
+  autoScale: false,
+  coupled: true,
+  fps: 20,
 };
 
 const initialState: SpectrumState = {
@@ -41,13 +50,32 @@ export const useSpectrumStore = create<SpectrumStore>()(
       const updatedSettings = { ...currentSettings, ...newSettings };
       set({ settings: updatedSettings });
 
-      // Send settings to backend via WebSocket only
-      import('../services/websocket').then(({ getWebSocketService }) => {
-        const ws = getWebSocketService();
-        if (ws.isConnected()) {
-          ws.emit('spectrum:settings:set', updatedSettings);
-        }
-      });
+      console.log('🎛️ Frontend updating settings:', newSettings);
+
+      // Send ONLY frequency control settings to backend (centerHz, spanHz, fftSize, etc.)
+      // Don't send display-only settings (colors, grid, etc.)
+      const backendSettings: Partial<SpectrumSettings> = {};
+      if ('centerHz' in newSettings) backendSettings.centerHz = newSettings.centerHz;
+      if ('spanHz' in newSettings) backendSettings.spanHz = newSettings.spanHz;
+      if ('fftSize' in newSettings) backendSettings.fftSize = newSettings.fftSize;
+      if ('averaging' in newSettings) backendSettings.averaging = newSettings.averaging;
+      if ('fps' in newSettings) backendSettings.fps = newSettings.fps;
+      if ('refLevel' in newSettings) backendSettings.refLevel = newSettings.refLevel;
+      if ('coupled' in newSettings) backendSettings.coupled = newSettings.coupled;
+
+      if (Object.keys(backendSettings).length > 0) {
+        console.log('🎛️ Sending to backend:', backendSettings);
+        import('../services/websocket').then(({ getWebSocketService }) => {
+          const ws = getWebSocketService();
+          if (ws.isConnected()) {
+            ws.emit('spectrum:settings:set', backendSettings);
+          } else {
+            console.log('🎛️ WebSocket not connected, cannot send settings');
+          }
+        });
+      } else {
+        console.log('🎛️ No backend settings to send (display-only change)');
+      }
     },
 
     updateFrame: (frame: SpectrumFrame) => {
