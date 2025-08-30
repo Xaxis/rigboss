@@ -38,6 +38,10 @@ const initialState: AudioState = {
   selectedOutputDevice: null,
   inputLevel: 50,
   outputLevel: 30,  // Start at 30% so audio is audible when started
+
+  // Separate meter levels for display (0-1)
+  inputMeterLevel: 0,
+  outputMeterLevel: 0,
   muted: false,
   recording: false,
   playing: false,
@@ -57,7 +61,16 @@ export const useAudioStore = create<AudioStore>()(
     setSelectedInputDevice: (deviceId: string | null) => set({ selectedInputDevice: deviceId }),
     setSelectedOutputDevice: (deviceId: string | null) => set({ selectedOutputDevice: deviceId }),
     setInputLevel: (level: number) => set({ inputLevel: level }),
-    setOutputLevel: (level: number) => set({ outputLevel: level }),
+    setOutputLevel: (level: number) => {
+      set({ outputLevel: level });
+      // Update master gain node if it exists
+      import('../services/websocket').then(({ getWebSocketService }) => {
+        const ws = getWebSocketService();
+        if (ws.masterGainNode) {
+          ws.masterGainNode.gain.value = level / 100;
+        }
+      });
+    },
     setMuted: (muted: boolean) => set({ muted }),
     setRecording: (recording: boolean) => set({ recording }),
     setPlaying: (playing: boolean) => set({ playing }),
@@ -110,53 +123,45 @@ export const useAudioStore = create<AudioStore>()(
 
     startAudio: async () => {
       try {
-        console.log('🔊 FRONTEND: Starting audio...');
-
         // Create audio context first
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log('🔊 FRONTEND: Audio context created, state:', audioContext.state);
 
         // Resume audio context if suspended (required for user interaction)
         if (audioContext.state === 'suspended') {
           await audioContext.resume();
-          console.log('🔊 FRONTEND: Audio context resumed, state:', audioContext.state);
         }
 
         set({ audioContext, connected: true });
-        console.log('🔊 FRONTEND: Audio store updated');
 
         // Start backend audio service
-        console.log('🔊 FRONTEND: Starting backend audio service...');
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
 
         await ws.emitWithAck('audio:start', {});
-        console.log('🔊 FRONTEND: Backend audio service started');
 
-        // Get user media for input (TX audio) - optional
+        // Get user media for input (TX audio) and start monitoring
         try {
-          const state = get();
-          if (state.selectedInputDevice) {
-            const constraints = {
-              audio: {
-                deviceId: { exact: state.selectedInputDevice },
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false,
-              }
-            };
+          const constraints = {
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            }
+          };
 
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            set({ inputStream: stream });
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          set({ inputStream: stream });
 
-            // Create analyser for level monitoring
-            const source = audioContext.createMediaStreamSource(stream);
-            const analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            source.connect(analyser);
+          // Create analyser for level monitoring
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
 
-            set({ analyserNode: analyser });
-          }
+          set({ analyserNode: analyser });
+
+          // Start microphone level monitoring
+          this.startMicrophoneMonitoring(analyser);
         } catch (micError) {
           console.warn('Microphone access failed, continuing without TX audio:', micError);
           // Continue without microphone - RX audio still works
@@ -267,10 +272,48 @@ export const useAudioStore = create<AudioStore>()(
     },
 
     updateLevels: (levels: { input: number; output: number }) => {
-      // DON'T override user volume settings!
-      // These are just level meter readings, not volume controls
-      // TODO: Add separate meter level state if needed for level meters
-      // For now, just ignore these to prevent overriding user volume settings
+      // Legacy method - kept for compatibility
+      set((state) => ({
+        ...state,
+        inputMeterLevel: levels.input,
+        outputMeterLevel: levels.output,
+      }));
+    },
+
+    updateMeterLevels: (levels: { outputRMS?: number; outputPeak?: number; inputRMS?: number; inputPeak?: number }) => {
+      // Update ONLY meter levels, never volume controls
+      set((state) => ({
+        ...state,
+        outputMeterLevel: levels.outputRMS || state.outputMeterLevel,
+        inputMeterLevel: levels.inputRMS || state.inputMeterLevel,
+      }));
+    },
+
+    // Start microphone level monitoring
+    startMicrophoneMonitoring: (analyser: AnalyserNode) => {
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const updateLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+
+        // Calculate RMS level
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i] * dataArray[i];
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        const level = rms / 255; // Normalize to 0-1
+
+        // Update input meter level (NOT volume control)
+        useAudioStore.getState().updateMeterLevels({ inputRMS: level });
+
+        // Continue monitoring
+        if (useAudioStore.getState().connected) {
+          requestAnimationFrame(updateLevel);
+        }
+      };
+
+      updateLevel();
     },
   }))
 );

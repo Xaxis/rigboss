@@ -221,22 +221,13 @@ class WebSocketService {
 
     // Listen for RX audio data and play it
     this.socket.on('audio:rx_data', (data: any) => {
-      console.log('🔊 FRONTEND: Received audio data:', data?.data?.length || 0, 'bytes');
       import('../stores/audio').then(({ useAudioStore }) => {
         const audioStore = useAudioStore.getState();
-        console.log('🔊 FRONTEND: Audio store state:', {
-          hasContext: !!audioStore.audioContext,
-          volume: audioStore.outputLevel,
-          muted: audioStore.muted
-        });
 
         if (audioStore.audioContext && audioStore.outputLevel > 0 && !audioStore.muted) {
-          console.log('🔊 FRONTEND: Playing audio data');
           // Convert Array back to ArrayBuffer
           const buffer = new Uint8Array(data.data).buffer;
           this.playAudioData(buffer, audioStore.audioContext, audioStore.outputLevel / 100);
-        } else {
-          console.log('🔊 FRONTEND: Audio blocked - conditions not met');
         }
       }).catch(() => {});
     });
@@ -247,6 +238,8 @@ class WebSocketService {
     });
   }
 
+  private masterGainNode: GainNode | null = null;
+  private limiterNode: DynamicsCompressorNode | null = null;
   private audioQueue: ArrayBuffer[] = [];
   private isPlaying = false;
   private nextPlayTime = 0;
@@ -255,6 +248,27 @@ class WebSocketService {
     try {
       if (audioData.byteLength === 0) return;
 
+      // Create audio chain if it doesn't exist
+      if (!this.masterGainNode) {
+        // Create gain node for volume control
+        this.masterGainNode = audioContext.createGain();
+
+        // Create limiter for safety
+        this.limiterNode = audioContext.createDynamicsCompressor();
+        this.limiterNode.threshold.value = -6; // Limit at -6dB
+        this.limiterNode.knee.value = 5;
+        this.limiterNode.ratio.value = 20; // Hard limiting
+        this.limiterNode.attack.value = 0.003; // 3ms attack
+        this.limiterNode.release.value = 0.1; // 100ms release
+
+        // Connect: gain -> limiter -> speakers
+        this.masterGainNode.connect(this.limiterNode);
+        this.limiterNode.connect(audioContext.destination);
+      }
+
+      // Update master volume (max 80% for safety)
+      this.masterGainNode.gain.value = Math.min(volume * 0.8, 0.8);
+
       // Add to queue for smooth playback
       this.audioQueue.push(audioData);
 
@@ -262,14 +276,14 @@ class WebSocketService {
       if (!this.isPlaying) {
         this.isPlaying = true;
         this.nextPlayTime = audioContext.currentTime;
-        this.processAudioQueue(audioContext, volume);
+        this.processAudioQueue(audioContext);
       }
     } catch (error) {
       console.error('🔊 Failed to queue audio data:', error);
     }
   }
 
-  private processAudioQueue(audioContext: AudioContext, volume: number): void {
+  private processAudioQueue(audioContext: AudioContext): void {
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
       return;
@@ -283,22 +297,37 @@ class WebSocketService {
       const audioBuffer = audioContext.createBuffer(1, sampleCount, 48000);
       const channelData = audioBuffer.getChannelData(0);
 
-      // Convert 16-bit PCM to float32
+      // Convert 16-bit PCM to float32 and calculate level
       const view = new Int16Array(audioData);
+      let sum = 0;
+      let maxSample = 0;
+
       for (let i = 0; i < view.length; i++) {
-        channelData[i] = view[i] / 32768.0;
+        const sample = view[i] / 32768.0;
+        // Apply soft limiting to prevent clipping
+        channelData[i] = Math.tanh(sample * 0.8); // Soft limit at 80%
+        sum += Math.abs(view[i]);
+        maxSample = Math.max(maxSample, Math.abs(view[i]));
       }
 
-      // Create audio nodes
+      // Calculate RMS level for meter display (separate from volume)
+      const rmsLevel = Math.sqrt(sum / view.length) / 32768.0;
+      const peakLevel = maxSample / 32768.0;
+
+      // Update level meters (NOT volume controls)
+      import('../stores/audio').then(({ useAudioStore }) => {
+        useAudioStore.getState().updateMeterLevels({
+          outputRMS: rmsLevel,
+          outputPeak: peakLevel
+        });
+      });
+
+      // Create audio source
       const source = audioContext.createBufferSource();
-      const gainNode = audioContext.createGain();
-
       source.buffer = audioBuffer;
-      gainNode.gain.value = volume;
 
-      // Connect: source -> gain -> destination
-      source.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      // Connect: source -> master gain -> destination
+      source.connect(this.masterGainNode!);
 
       // Schedule playback for smooth streaming
       source.start(this.nextPlayTime);
@@ -306,13 +335,13 @@ class WebSocketService {
 
       // Process next chunk when this one finishes
       source.onended = () => {
-        this.processAudioQueue(audioContext, volume);
+        this.processAudioQueue(audioContext);
       };
 
     } catch (error) {
       console.error('🔊 Failed to play audio chunk:', error);
       // Continue with next chunk
-      this.processAudioQueue(audioContext, volume);
+      this.processAudioQueue(audioContext);
     }
   }
 

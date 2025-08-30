@@ -143,35 +143,33 @@ export class AudioService extends EventEmitter {
   private async discoverAudioDevices(): Promise<void> {
     console.log('🔍 Discovering audio devices...');
 
-    // Use the same devices that work for spectrum
-    const workingDevices = [
-      { id: 'sysdefault:CARD=CODEC', name: 'Radio Audio (CODEC)', type: 'both' },
-      { id: 'default', name: 'System Default', type: 'both' },
-    ];
-
-    this.availableDevices = [];
-
-    for (const device of workingDevices) {
-      // Add input device
-      this.availableDevices.push({
-        id: device.id,
-        name: `${device.name} (Input)`,
+    // Simplified device list - no duplicates
+    this.availableDevices = [
+      {
+        id: 'sysdefault:CARD=CODEC',
+        name: 'Radio Audio Interface',
         type: 'input',
         channels: 1,
         sampleRate: this.config.sampleRate,
-        isDefault: device.id === 'default',
-      });
-
-      // Add output device
-      this.availableDevices.push({
-        id: device.id,
-        name: `${device.name} (Output)`,
+        isDefault: true,
+      },
+      {
+        id: 'default',
+        name: 'Computer Speakers',
         type: 'output',
         channels: 2,
         sampleRate: this.config.sampleRate,
-        isDefault: device.id === 'default',
-      });
-    }
+        isDefault: true,
+      },
+      {
+        id: 'default',
+        name: 'Computer Microphone',
+        type: 'input',
+        channels: 1,
+        sampleRate: this.config.sampleRate,
+        isDefault: false,
+      },
+    ];
 
     // Set default devices
     const defaultOutput = this.availableDevices.find(d => d.type === 'output' && d.isDefault);
