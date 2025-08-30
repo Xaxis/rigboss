@@ -485,41 +485,22 @@ export class SpectrumService extends EventEmitter {
       this.lastBins = null;
     }
 
-    // Generate realistic spectrum data based on frequency settings
-    const startHz = this.settings.centerHz - this.settings.spanHz / 2;
-    const binSizeHz = this.settings.spanHz / bins.length;
-    const simulatedBins = new Float32Array(bins.length);
+    const dbBins = (this.lastBins ?? bins).slice();
 
-    // Create realistic spectrum with signals at specific frequencies
-    for (let i = 0; i < bins.length; i++) {
-      const binFreq = startHz + i * binSizeHz;
+    // Provide FIXED wide frequency range for frontend to zoom/pan within
+    // Backend captures wide range, frontend controls display portion
+    const wideSpanHz = 500000; // 500 kHz wide capture
+    const startHz = this.settings.centerHz - wideSpanHz / 2;
+    const binSizeHz = wideSpanHz / dbBins.length;
 
-      // Base noise floor
-      let dbValue = -80 + Math.random() * 10;
-
-      // Add signals at common ham frequencies
-      const signals = [
-        { freq: 14074000, strength: -20, width: 2000 }, // FT8
-        { freq: 14230000, strength: -30, width: 3000 }, // SSB
-        { freq: 14205000, strength: -25, width: 2500 }, // SSB
-        { freq: 14150000, strength: -35, width: 1000 }, // CW
-        { freq: 14070000, strength: -28, width: 500 },  // PSK31
-      ];
-
-      for (const signal of signals) {
-        const freqDiff = Math.abs(binFreq - signal.freq);
-        if (freqDiff < signal.width) {
-          const attenuation = (freqDiff / signal.width) * 20;
-          dbValue = Math.max(dbValue, signal.strength - attenuation);
-        }
-      }
-
-      // Mix in some of the actual audio data for realism
-      const audioContribution = (this.lastBins ?? bins)[i % bins.length] * 0.1;
-      simulatedBins[i] = dbValue + audioContribution;
-    }
-
-    const dbBins = Array.from(simulatedBins);
+    console.log('🎛️ Backend frame:', {
+      centerHz: this.settings.centerHz,
+      wideSpanHz,
+      startHz,
+      endHz: startHz + wideSpanHz,
+      binSizeHz,
+      numBins: dbBins.length
+    });
 
     // Emit periodic status with fps/device/provider
     this.framesCount++;
@@ -535,7 +516,7 @@ export class SpectrumService extends EventEmitter {
       timestamp: Date.now(),
       startHz,
       binSizeHz,
-      bins: dbBins,
+      bins: Array.from(dbBins),
     };
 
     this.emit(EVENTS.SPECTRUM_FRAME, frame);

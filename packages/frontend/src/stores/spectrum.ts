@@ -52,16 +52,23 @@ export const useSpectrumStore = create<SpectrumStore>()(
 
       console.log('🎛️ Frontend updating settings:', newSettings);
 
-      // Send ONLY frequency control settings to backend (centerHz, spanHz, fftSize, etc.)
-      // Don't send display-only settings (colors, grid, etc.)
+      // For proper spectrum analyzer behavior:
+      // - Backend provides wide, fixed frequency range
+      // - Frontend controls zoom/pan within that range
+      // - Only send non-display settings to backend
       const backendSettings: Partial<SpectrumSettings> = {};
-      if ('centerHz' in newSettings) backendSettings.centerHz = newSettings.centerHz;
-      if ('spanHz' in newSettings) backendSettings.spanHz = newSettings.spanHz;
+
+      // Only send these settings to backend (not centerHz/spanHz for display)
       if ('fftSize' in newSettings) backendSettings.fftSize = newSettings.fftSize;
       if ('averaging' in newSettings) backendSettings.averaging = newSettings.averaging;
       if ('fps' in newSettings) backendSettings.fps = newSettings.fps;
       if ('refLevel' in newSettings) backendSettings.refLevel = newSettings.refLevel;
       if ('coupled' in newSettings) backendSettings.coupled = newSettings.coupled;
+
+      // Only send centerHz to backend if coupled mode (follows radio frequency)
+      if ('centerHz' in newSettings && updatedSettings.coupled) {
+        backendSettings.centerHz = newSettings.centerHz;
+      }
 
       if (Object.keys(backendSettings).length > 0) {
         console.log('🎛️ Sending to backend:', backendSettings);

@@ -163,28 +163,49 @@ export function SpectrumCanvas({
     ctx.lineJoin = 'round';
     ctx.beginPath();
 
-    // Draw spectrum trace - BACKEND HANDLES FREQUENCY MAPPING
+    // Draw spectrum trace - PROPER SPAN/CENTER CONTROL
     ctx.strokeStyle = settings.spectrumColor;
     ctx.lineWidth = variant === 'mini' ? 1 : 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
 
+    // Calculate what portion of the data to display based on span/center
+    const dataStartHz = frame.startHz;
+    const dataEndHz = frame.startHz + frame.binSizeHz * frame.bins.length;
+    const dataCenterHz = (dataStartHz + dataEndHz) / 2;
+    const dataSpanHz = dataEndHz - dataStartHz;
+
+    // User's display settings
+    const displayStartHz = settings.centerHz - settings.spanHz / 2;
+    const displayEndHz = settings.centerHz + settings.spanHz / 2;
+
+    console.log('RENDER DEBUG:', {
+      dataRange: `${dataStartHz} - ${dataEndHz} (${dataSpanHz} Hz)`,
+      displayRange: `${displayStartHz} - ${displayEndHz} (${settings.spanHz} Hz)`,
+      center: settings.centerHz
+    });
+
     let hasStarted = false;
 
-    // Backend already maps bins to the correct frequency range
-    // Just draw bins across full width
+    // Draw only the portion of data that falls within display range
     for (let i = 0; i < processedBins.length; i++) {
-      const x = (i / (processedBins.length - 1)) * width;
-      const dbValue = processedBins[i];
-      const normalizedDb = Math.max(0, Math.min(1, (dbValue - minDb) / dbRange));
-      const y = Math.max(0, Math.min(height, height - (normalizedDb * height)));
+      const binHz = dataStartHz + i * frame.binSizeHz;
 
-      if (!hasStarted) {
-        ctx.moveTo(x, y);
-        hasStarted = true;
-      } else {
-        ctx.lineTo(x, y);
+      // Only draw if this bin is within the display span
+      if (binHz >= displayStartHz && binHz <= displayEndHz) {
+        // Map frequency to pixel position within display span
+        const x = ((binHz - displayStartHz) / settings.spanHz) * width;
+        const dbValue = processedBins[i];
+        const normalizedDb = Math.max(0, Math.min(1, (dbValue - minDb) / dbRange));
+        const y = Math.max(0, Math.min(height, height - (normalizedDb * height)));
+
+        if (!hasStarted) {
+          ctx.moveTo(x, y);
+          hasStarted = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
       }
     }
     ctx.stroke();
@@ -221,15 +242,30 @@ export function SpectrumCanvas({
       ctx.putImageData(imageData, 0, 1);
     }
 
-    // Draw new line at top - BACKEND HANDLES FREQUENCY MAPPING
+    // Draw new line at top - PROPER SPAN/CENTER CONTROL
     const imageData = ctx.createImageData(actualWidth, 1);
     const data = imageData.data;
 
+    // Calculate frequency mapping (same as spectrum)
+    const dataStartHz = frame.startHz;
+    const displayStartHz = settings.centerHz - settings.spanHz / 2;
+    const displayEndHz = settings.centerHz + settings.spanHz / 2;
+
     for (let x = 0; x < actualWidth; x++) {
-      // Backend already maps bins to correct frequency range
-      // Just map pixels to bins across full width
-      const binIndex = Math.floor((x / actualWidth) * frame.bins.length);
-      const dbValue = frame.bins[binIndex] || (settings.refLevel - 80);
+      // Calculate what frequency this pixel represents
+      const pixelHz = displayStartHz + (x / actualWidth) * settings.spanHz;
+
+      // Find corresponding bin in the data
+      const binIndex = Math.round((pixelHz - dataStartHz) / frame.binSizeHz);
+
+      // Get dB value if within data range, otherwise use noise floor
+      let dbValue: number;
+      if (binIndex >= 0 && binIndex < frame.bins.length) {
+        dbValue = frame.bins[binIndex];
+      } else {
+        dbValue = settings.refLevel - 80; // Noise floor
+      }
+
       const color = getWaterfallColor(dbValue);
 
       const rgb = color.match(/\d+/g);
