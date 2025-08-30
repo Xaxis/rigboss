@@ -43,7 +43,10 @@ export const useSpectrumStore = create<SpectrumStore>()(
 
       // Send settings to backend via WebSocket only
       import('../services/websocket').then(({ getWebSocketService }) => {
-        getWebSocketService().emit('spectrum:settings:set', updatedSettings);
+        const ws = getWebSocketService();
+        if (ws.isConnected()) {
+          ws.emit('spectrum:settings:set', updatedSettings);
+        }
       });
     },
 
@@ -55,7 +58,10 @@ export const useSpectrumStore = create<SpectrumStore>()(
       set({ source });
       // Send via WebSocket as part of settings
       import('../services/websocket').then(({ getWebSocketService }) => {
-        getWebSocketService().emit('spectrum:settings:set', { source });
+        const ws = getWebSocketService();
+        if (ws.isConnected()) {
+          ws.emit('spectrum:settings:set', { source });
+        }
       });
     },
 

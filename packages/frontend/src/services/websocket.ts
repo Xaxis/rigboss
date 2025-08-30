@@ -169,11 +169,21 @@ class WebSocketService {
     });
 
 
-    // Listen for spectrum settings
+    // Listen for spectrum status/settings
     this.socket.on('spectrum:settings', (data: any) => {
       import('../stores/spectrum').then(({ useSpectrumStore }) => {
         if (data?.settings) {
-          useSpectrumStore.setState((prev: any) => ({ settings: { ...prev.settings, ...data.settings }, connected: data.available !== false ? true : prev.connected }));
+          const meta = {
+            available: data.available,
+            device: data.device,
+            provider: data.provider,
+            fps: data.fps,
+          };
+          useSpectrumStore.setState((prev: any) => ({
+            settings: { ...prev.settings, ...data.settings },
+            connected: data.available !== false ? true : prev.connected,
+            meta,
+          }));
         }
       });
     });

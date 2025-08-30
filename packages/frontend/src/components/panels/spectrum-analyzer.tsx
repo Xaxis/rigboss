@@ -10,6 +10,7 @@ import { useSettings } from '@/stores/ui';
 import { toast } from '@/stores/ui';
 import { cn } from '@/lib/utils';
 
+import { SpectrumStatusBar } from '@/components/spectrum/spectrum-status-bar';
 export function SpectrumAnalyzerPanel() {
   const { autoDetectSource, setConnected } = useSpectrumStore();
   const connected = useSpectrumConnected();
@@ -64,7 +65,7 @@ export function SpectrumAnalyzerPanel() {
               </Button>
             </div>
           </div>
-          
+
           <div className="flex-1 flex">
             <div className="flex-1">
               <SpectrumCanvas />
@@ -95,7 +96,7 @@ export function SpectrumAnalyzerPanel() {
             <div className="flex items-center gap-4">
               <div className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium',
-                connected 
+                connected
                   ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                   : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
               )}>
@@ -105,12 +106,17 @@ export function SpectrumAnalyzerPanel() {
                 )} />
                 {connected ? 'Active' : 'Offline'}
               </div>
-              
+
               <div className="text-sm text-muted-foreground">
                 Real-time RF spectrum analysis with waterfall display
+
+              {/* Availability and source info */}
+              <div className="text-xs text-muted-foreground font-mono">
+                <SpectrumStatusBar />
+              </div>
               </div>
             </div>
-            
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -147,7 +153,7 @@ export function SpectrumAnalyzerPanel() {
             </CardContent>
           </Card>
         </div>
-        
+
         <div className={cn(
           "transition-all duration-300 ease-in-out",
           rightPanelOpen ? "block" : "hidden"

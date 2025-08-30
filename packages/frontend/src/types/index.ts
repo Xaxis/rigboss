@@ -159,7 +159,14 @@ export interface SpectrumFrame {
   timestamp: number;
   startHz: number;
   binSizeHz: number;
-  db: number[];
+  bins: number[];
+}
+
+export interface SpectrumMeta {
+  available?: boolean;
+  device?: string;
+  provider?: 'arecord' | 'ffmpeg';
+  fps?: number;
 }
 
 export interface SpectrumState {
@@ -169,6 +176,7 @@ export interface SpectrumState {
   source: SpectrumSource;
   fullscreen: boolean;
   mode: SpectrumMode;
+  meta?: SpectrumMeta;
 }
 
 // Audio types
