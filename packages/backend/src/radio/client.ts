@@ -1,32 +1,22 @@
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
+import type { ClientMetrics } from './types.js';
 
-type PendingCommand = {
+interface QueuedCommand {
   cmd: string;
   resolve: (lines: string[]) => void;
   reject: (error: Error) => void;
   timeoutMs: number;
+  priority: 'HIGH' | 'NORMAL';
   fallback?: boolean;
-  priority?: 'HIGH' | 'NORMAL';
-};
+}
 
-type ActiveCommand = PendingCommand & {
-  lines: string[];
+interface ActiveCommand extends QueuedCommand {
   timeout: NodeJS.Timeout;
   idle?: NodeJS.Timeout;
+  lines: string[];
   startedAt: number;
-};
-
-export type ClientMetrics = {
-  connected: boolean;
-  reconnecting: boolean;
-  queueSize: number;
-  inflightCmd: string | null;
-  inflightAgeMs: number | null;
-  lastError: string | null;
-  lastRprtAt: number | null;
-  target: { host: string; port: number };
-};
+}
 
 export class RigctldClient {
   private socket: net.Socket | null = null;
@@ -34,7 +24,7 @@ export class RigctldClient {
   private port: number;
   private buffer = '';
   private current: ActiveCommand | null = null;
-  private queue: PendingCommand[] = [];
+  private queue: QueuedCommand[] = [];
   private connected = false;
   private reconnecting = false;
   private lastError: string | null = null;
@@ -82,7 +72,13 @@ export class RigctldClient {
         socket.off('error', onError);
         this.connected = true;
         this.reconnecting = false;
-        this.wireSocket(socket);
+        this.lastError = null;
+
+        socket.on('data', (buf) => this.onData(buf));
+        socket.on('error', (err) => this.onSocketError(err));
+        socket.on('close', () => this.onSocketClose());
+        socket.on('end', () => this.onSocketClose());
+
         resolve();
       });
     });
@@ -91,135 +87,149 @@ export class RigctldClient {
   async request(
     cmd: string,
     timeoutMs = 5000,
-    opts?: { fallback?: boolean; priority?: 'HIGH' | 'NORMAL' }
+    options?: { fallback?: boolean; priority?: 'HIGH' | 'NORMAL' }
   ): Promise<string[]> {
-    if (!this.socket) throw new Error('not connected');
+    if (!this.socket) {
+      throw new Error('Not connected to rigctld');
+    }
 
     return new Promise<string[]>((resolve, reject) => {
-      const pending: PendingCommand = {
+      const command: QueuedCommand = {
         cmd,
         resolve,
         reject,
         timeoutMs,
-        fallback: opts?.fallback,
-        priority: opts?.priority ?? 'NORMAL',
+        priority: options?.priority ?? 'NORMAL',
+        fallback: options?.fallback,
       };
 
-      if (pending.priority === 'HIGH') {
-        this.queue.unshift(pending);
+      // High priority commands go to front of queue
+      if (command.priority === 'HIGH') {
+        this.queue.unshift(command);
       } else {
-        this.queue.push(pending);
+        this.queue.push(command);
       }
 
-      this.startNext();
+      this.processNext();
     });
-  }
-
-  private wireSocket(socket: net.Socket): void {
-    socket.on('data', (buf) => this.onData(buf));
-    socket.on('error', (err) => this.onSocketError(err));
-    socket.on('close', () => this.onSocketClose());
-    socket.on('end', () => this.onSocketClose());
   }
 
   private onData(buf: Buffer): void {
     this.buffer += buf.toString('utf8');
-    let nlIndex: number;
-    while ((nlIndex = this.buffer.indexOf('\n')) !== -1) {
-      const line = this.buffer.slice(0, nlIndex).replace(/\r$/, '');
-      this.buffer = this.buffer.slice(nlIndex + 1);
-      this.pushLine(line);
+    let newlineIndex: number;
+
+    while ((newlineIndex = this.buffer.indexOf('\n')) !== -1) {
+      const line = this.buffer.slice(0, newlineIndex).replace(/\r$/, '');
+      this.buffer = this.buffer.slice(newlineIndex + 1);
+      this.processLine(line);
     }
   }
 
-  private pushLine(line: string): void {
+  private processLine(line: string): void {
     if (!this.current) return;
 
-    const current = this.current;
-    current.lines.push(line);
+    this.current.lines.push(line);
 
     if (line.startsWith('RPRT ')) {
       this.lastRprtAt = Date.now();
-      this.finishCurrent(false);
+      this.finishCommand(false);
       return;
     }
 
-    if (current.fallback) {
-      if (current.idle) clearTimeout(current.idle);
-      current.idle = setTimeout(() => {
+    // For fallback commands, use idle timeout
+    if (this.current.fallback) {
+      if (this.current.idle) clearTimeout(this.current.idle);
+      this.current.idle = setTimeout(() => {
         this.lastRprtAt = Date.now();
-        this.finishCurrent(true);
+        this.finishCommand(true);
       }, 200);
     }
   }
 
   private onSocketError(err: Error): void {
     this.lastError = err.message;
-    this.rejectAll(err);
+    this.connected = false;
     this.reconnecting = true;
+
+    if (this.current) {
+      this.current.reject(err);
+      this.clearTimers();
+      this.current = null;
+    }
+
+    // Reject all queued commands
+    while (this.queue.length) {
+      this.queue.shift()!.reject(err);
+    }
+
+    this.cleanup();
     void this.reconnect();
   }
 
   private onSocketClose(): void {
     this.connected = false;
     this.reconnecting = true;
-    this.rejectAll(new Error('socket closed'));
-    this.cleanup();
-    void this.reconnect();
-  }
 
-  private rejectAll(error: Error): void {
     if (this.current) {
-      this.current.reject(error);
-      this.clearCurrentTimers();
+      this.current.reject(new Error('Socket closed'));
+      this.clearTimers();
       this.current = null;
     }
+
+    // Reject all queued commands
     while (this.queue.length) {
-      this.queue.shift()!.reject(error);
+      this.queue.shift()!.reject(new Error('Socket closed'));
     }
+
+    this.cleanup();
+    void this.reconnect();
   }
 
   private cleanup(): void {
     if (this.socket) {
       try {
         this.socket.destroy();
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
     this.socket = null;
     this.buffer = '';
   }
 
-  private clearCurrentTimers(): void {
+  private clearTimers(): void {
     if (!this.current) return;
     clearTimeout(this.current.timeout);
     if (this.current.idle) clearTimeout(this.current.idle);
   }
 
-  private finishCurrent(fromIdle: boolean): void {
+  private finishCommand(fromIdle: boolean): void {
     if (!this.current) return;
 
-    const current = this.current;
-    this.clearCurrentTimers();
+    const command = this.current;
+    this.clearTimers();
     this.current = null;
 
-    const lines = current.lines.slice();
-    const hasRprt = lines.some(l => l.startsWith('RPRT '));
+    const lines = command.lines.slice();
 
-    if (!fromIdle && !hasRprt && !current.fallback) {
-      current.reject(new Error('Malformed response (no RPRT)'));
+    // Validate response format
+    if (!fromIdle && !lines.find(l => l.startsWith('RPRT ')) && !command.fallback) {
+      command.reject(new Error('Malformed response (no RPRT)'));
     } else {
-      current.resolve(lines);
+      command.resolve(lines);
     }
 
-    this.startNext();
+    this.processNext();
   }
 
   private write(cmd: string): void {
-    if (!this.socket) throw new Error('not connected');
+    if (!this.socket) {
+      throw new Error('Not connected');
+    }
     this.socket.write(cmd + '\n');
   }
 
-  private startNext(): void {
+  private processNext(): void {
     if (this.current || this.queue.length === 0) return;
 
     const next = this.queue.shift()!;
@@ -229,12 +239,12 @@ export class RigctldClient {
       startedAt: Date.now(),
       timeout: setTimeout(() => {
         if (this.current === this.current) {
-          next.reject(new Error(`rigctld timeout for: ${next.cmd}`));
+          next.reject(new Error(`Rigctld timeout for: ${next.cmd}`));
           this.current = null;
-          this.startNext();
+          this.processNext();
         }
       }, next.timeoutMs),
-    };
+    } as ActiveCommand;
 
     this.write(next.cmd);
   }
@@ -243,7 +253,7 @@ export class RigctldClient {
     if (this.socket) return;
 
     let backoff = 1000;
-    for (;;) {
+    while (true) {
       try {
         await this.connect();
         return;
