@@ -9,6 +9,7 @@ export const EVENTS = {
   
   // Spectrum events
   SPECTRUM_FRAME: 'spectrum:frame',
+  SPECTRUM_SETTINGS: 'spectrum:settings',
   
   // Audio events
   AUDIO_LEVEL: 'audio:level',

@@ -86,15 +86,18 @@ export class AudioService extends EventEmitter {
 
     this.levelTimer = setInterval(() => {
       // TODO: Get actual audio levels from audio system
-      // For now, simulate some levels
-      const inputLevel = Math.random() * 0.3; // Simulate mic input
-      const outputLevel = Math.random() * 0.5; // Simulate radio output
+      // For now, simulate realistic levels with some variation
+      const baseInput = this.inputLevel + (Math.random() - 0.5) * 0.1;
+      const baseOutput = this.outputLevel + (Math.random() - 0.5) * 0.1;
+
+      const inputLevel = Math.max(0, Math.min(1, baseInput));
+      const outputLevel = Math.max(0, Math.min(1, baseOutput));
 
       this.emit(EVENTS.AUDIO_LEVEL, {
         input: inputLevel,
         output: outputLevel,
       } as AudioLevel);
-    }, 100); // 10 FPS for smooth level meters
+    }, 50); // 20 FPS for smooth level meters
   }
 
   private stopLevelMonitoring(): void {

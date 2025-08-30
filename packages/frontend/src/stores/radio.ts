@@ -237,8 +237,21 @@ export const useRadioStore = create<RadioStore>()(
     },
 
     updateFromBackend: (data: Partial<RadioState>) => {
-      // Direct update since backend state now matches frontend state structure
-      set((state) => ({ ...state, ...data }));
+      // Smart state reconciliation - only update if values actually changed
+      set((state) => {
+        const updates: Partial<RadioState> = {};
+        let hasChanges = false;
+
+        // Only update fields that have actually changed
+        Object.entries(data).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && (state as any)[key] !== value) {
+            (updates as any)[key] = value;
+            hasChanges = true;
+          }
+        });
+
+        return hasChanges ? { ...state, ...updates } : state;
+      });
     },
 
     updateCapabilities: (capabilities: RadioCapabilities) => {

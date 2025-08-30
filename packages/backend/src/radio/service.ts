@@ -12,6 +12,9 @@ export class RadioService extends EventEmitter {
   private capabilities: RadioCapabilities | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
   private pollTick = 0;
+  private activeTuning = false;
+  private lastUserCommand = 0;
+  private stateTimestamps: Record<string, number> = {};
 
   constructor(host: string, port: number) {
     super();
@@ -66,29 +69,33 @@ export class RadioService extends EventEmitter {
     return this.capabilities || this.getDefaultCapabilities();
   }
 
-  // Core radio operations with optimistic updates
+  // Core radio operations with user intent tracking
   async setFrequency(hz: number): Promise<void> {
+    this.markUserCommand('frequencyHz');
     await this.commands.setFrequency(hz);
-    this.state.frequencyHz = hz;
+    this.updateStateWithSource('frequencyHz', hz, 'user');
     this.emitState();
   }
 
   async setMode(mode: string, bandwidthHz?: number): Promise<void> {
+    this.markUserCommand('mode');
     await this.commands.setMode(mode, bandwidthHz);
-    this.state.mode = mode;
-    if (bandwidthHz) this.state.bandwidthHz = bandwidthHz;
+    this.updateStateWithSource('mode', mode, 'user');
+    if (bandwidthHz) this.updateStateWithSource('bandwidthHz', bandwidthHz, 'user');
     this.emitState();
   }
 
   async setPower(percent: number): Promise<void> {
+    this.markUserCommand('power');
     await this.commands.setPower(percent);
-    this.state.power = percent;
+    this.updateStateWithSource('power', percent, 'user');
     this.emitState();
   }
 
   async setPTT(on: boolean): Promise<void> {
+    this.markUserCommand('ptt');
     await this.commands.setPTT(on);
-    this.state.ptt = on;
+    this.updateStateWithSource('ptt', on, 'user');
     this.emitState();
   }
 
@@ -162,16 +169,27 @@ export class RadioService extends EventEmitter {
   private startPolling(): void {
     if (this.pollTimer) return;
 
+    // Adaptive polling: faster when user is actively tuning
+    const pollInterval = this.isActiveTuning() ? 200 : 500; // 5Hz vs 2Hz
+
     this.pollTimer = setInterval(async () => {
       try {
-        await this.pollRadioState();
+        await this.pollCriticalState();
         this.pollTick++;
+
+        // Extended state every 4th tick (800ms-2s depending on mode)
+        if (this.pollTick % 4 === 0) {
+          await this.pollExtendedState();
+        }
+
+        // Update active tuning status
+        this.updateActiveTuningStatus();
       } catch (error) {
         this.state.connected = false;
         this.emitState();
         this.emit(EVENTS.RADIO_ERROR, { error: 'Polling failed' });
       }
-    }, 1000);
+    }, pollInterval);
   }
 
   private stopPolling(): void {
@@ -182,8 +200,8 @@ export class RadioService extends EventEmitter {
     }
   }
 
-  private async pollRadioState(): Promise<void> {
-    // Core state every second - critical for UI responsiveness
+  private async pollCriticalState(): Promise<void> {
+    // Critical state for real-time tracking
     const [frequency, modeInfo, ptt, vfo, splitInfo] = await Promise.all([
       this.commands.getFrequency(),
       this.commands.getMode(),
@@ -192,33 +210,73 @@ export class RadioService extends EventEmitter {
       this.commands.getSplit(),
     ]);
 
-    // Update state
-    this.state.frequencyHz = frequency ?? this.state.frequencyHz;
-    this.state.mode = modeInfo.mode ?? this.state.mode;
-    this.state.bandwidthHz = modeInfo.bandwidthHz ?? this.state.bandwidthHz;
-    if (typeof ptt === 'boolean') this.state.ptt = ptt;
-    if (vfo) this.state.vfo = vfo;
-    if (typeof splitInfo.split === 'boolean') this.state.split = splitInfo.split;
-
-    // Extended state every 3 seconds
-    if (this.pollTick % 3 === 0) {
-      const [power, swr, signal, rit, xit] = await Promise.all([
-        this.commands.getPower(),
-        this.commands.getSWR(),
-        this.commands.getSignalStrength(),
-        this.commands.getRIT(),
-        this.commands.getXIT(),
-      ]);
-
-      if (typeof power === 'number') this.state.power = power;
-      if (typeof swr === 'number') this.state.swr = swr;
-      if (typeof signal === 'number') this.state.signalStrength = signal;
-      if (typeof rit === 'number') this.state.rit = rit;
-      if (typeof xit === 'number') this.state.xit = xit;
-    }
+    // Update state with conflict resolution
+    this.updateStateWithSource('frequencyHz', frequency, 'radio');
+    this.updateStateWithSource('mode', modeInfo.mode, 'radio');
+    this.updateStateWithSource('bandwidthHz', modeInfo.bandwidthHz, 'radio');
+    this.updateStateWithSource('ptt', ptt, 'radio');
+    this.updateStateWithSource('vfo', vfo, 'radio');
+    this.updateStateWithSource('split', splitInfo.split, 'radio');
 
     this.state.connected = true;
     this.emitState();
+  }
+
+  private async pollExtendedState(): Promise<void> {
+    // Extended state - less critical for real-time
+    const [power, swr, signal, rit, xit] = await Promise.all([
+      this.commands.getPower(),
+      this.commands.getSWR(),
+      this.commands.getSignalStrength(),
+      this.commands.getRIT(),
+      this.commands.getXIT(),
+    ]);
+
+    this.updateStateWithSource('power', power, 'radio');
+    this.updateStateWithSource('swr', swr, 'radio');
+    this.updateStateWithSource('signalStrength', signal, 'radio');
+    this.updateStateWithSource('rit', rit, 'radio');
+    this.updateStateWithSource('xit', xit, 'radio');
+  }
+
+  private markUserCommand(field: string): void {
+    this.lastUserCommand = Date.now();
+    this.stateTimestamps[field] = Date.now();
+    this.activeTuning = true;
+  }
+
+  private updateStateWithSource(field: string, value: any, source: 'user' | 'radio'): void {
+    if (value === undefined || value === null) return;
+
+    const now = Date.now();
+    const lastUserTime = this.stateTimestamps[field] || 0;
+    const userRecentlyChanged = (now - lastUserTime) < 2000; // 2 second user priority
+
+    // User intent takes priority for recent changes
+    if (source === 'radio' && userRecentlyChanged) {
+      return; // Ignore radio updates for recently user-changed fields
+    }
+
+    // Update state and timestamp
+    (this.state as any)[field] = value;
+    if (source === 'user') {
+      this.stateTimestamps[field] = now;
+    }
+  }
+
+  private isActiveTuning(): boolean {
+    const now = Date.now();
+    return this.activeTuning && (now - this.lastUserCommand) < 3000; // 3 second window
+  }
+
+  private updateActiveTuningStatus(): void {
+    const now = Date.now();
+    if (this.activeTuning && (now - this.lastUserCommand) > 3000) {
+      this.activeTuning = false;
+      // Restart polling with new interval
+      this.stopPolling();
+      this.startPolling();
+    }
   }
 
   private emitState(): void {
