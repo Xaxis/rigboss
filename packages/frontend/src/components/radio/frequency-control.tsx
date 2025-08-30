@@ -171,18 +171,21 @@ export function FrequencyControl() {
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">Quick Bands</div>
           <div className="grid grid-cols-4 gap-1">
-            {bandPresets.map((band) => (
-              <Button
-                key={band.name}
-                variant="outline"
-                size="sm"
-                onClick={() => handleBandSelect(band.frequency)}
-                disabled={!connected}
-                className="text-xs"
-              >
-                {band.name}
-              </Button>
-            ))}
+            {bandPresets.map((band) => {
+              const isCurrentBand = currentBand === band.name;
+              return (
+                <Button
+                  key={band.name}
+                  variant={isCurrentBand ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleBandSelect(band.frequency)}
+                  disabled={!connected}
+                  className="text-xs"
+                >
+                  {band.name}
+                </Button>
+              );
+            })}
           </div>
         </div>
 

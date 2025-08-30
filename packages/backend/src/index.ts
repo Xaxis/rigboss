@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config/env.js';
 import { RadioService } from './radio/service.js';
 import { AudioService } from './audio/service.js';
+import { SpectrumService } from './spectrum/service.js';
 import { EVENTS } from './events.js';
 import {
   SetFrequencySchema,
@@ -41,6 +42,8 @@ async function main() {
     sampleRate: config.AUDIO_SAMPLE_RATE,
     bufferSize: config.AUDIO_BUFFER_SIZE,
   });
+
+  const spectrumService = new SpectrumService({ sampleRate: config.AUDIO_SAMPLE_RATE });
 
   // Initialize Socket.IO
   const io = new SocketIOServer(fastify.server, {
@@ -157,6 +160,16 @@ async function main() {
         await radioService.tune(ms);
         callback?.(null, { success: true });
       } catch (error: any) {
+
+    // Spectrum settings via WS
+    socket.on('spectrum:settings:set', (payload, callback) => {
+      try {
+        const applied = spectrumService.applySettings(payload || {});
+        callback?.(null, { success: true, settings: applied });
+      } catch (e: any) {
+        callback?.(e.message || 'Failed to apply spectrum settings', null);
+      }
+    });
         callback?.(error.message, null);
       }
     });

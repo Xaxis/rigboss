@@ -65,9 +65,9 @@ export function SpectrumCanvas() {
     height: number,
     spectrumHeight: number
   ) => {
-    if (!frame.db || frame.db.length === 0) return;
+    const data = frame?.bins as number[] | undefined;
+    if (!data || data.length === 0) return;
 
-    const data = frame.db;
     const binWidth = width / data.length;
     const maxDb = settings.refLevel;
     const minDb = maxDb - 80; // 80dB dynamic range

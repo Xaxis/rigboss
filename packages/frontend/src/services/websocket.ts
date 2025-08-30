@@ -59,7 +59,7 @@ class WebSocketService {
           };
           this.reconnectAttempts++;
           this.notifyConnectionHandlers();
-          
+
           if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             reject(error);
           }
@@ -163,6 +163,15 @@ class WebSocketService {
       });
     });
 
+
+    // Listen for spectrum settings
+    this.socket.on('spectrum:settings', (data: any) => {
+      import('../stores/spectrum').then(({ useSpectrumStore }) => {
+        if (data?.settings) {
+          useSpectrumStore.setState((prev: any) => ({ settings: { ...prev.settings, ...data.settings }, connected: data.available !== false ? true : prev.connected }));
+        }
+      });
+    });
     // Listen for audio levels
     this.socket.on('audio:level', (data: any) => {
       import('../stores/audio').then(({ useAudioStore }) => {

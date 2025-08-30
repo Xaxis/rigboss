@@ -39,15 +39,12 @@ export const useSpectrumStore = create<SpectrumStore>()(
     updateSettings: (newSettings: Partial<SpectrumSettings>) => {
       const currentSettings = get().settings;
       const updatedSettings = { ...currentSettings, ...newSettings };
-      
       set({ settings: updatedSettings });
-      
-      // Send settings to backend
-      fetch('/api/spectrum/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedSettings),
-      }).catch(console.error);
+
+      // Send settings to backend via WebSocket only
+      import('../services/websocket').then(({ getWebSocketService }) => {
+        getWebSocketService().emit('spectrum:settings:set', updatedSettings);
+      });
     },
 
     updateFrame: (frame: SpectrumFrame) => {
