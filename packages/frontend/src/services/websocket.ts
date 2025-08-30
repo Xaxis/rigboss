@@ -221,23 +221,13 @@ class WebSocketService {
 
     // Listen for RX audio data and play it
     this.socket.on('audio:rx_data', (data: any) => {
-      console.log('🔊 Received audio data:', data.data?.length || 0, 'bytes');
       import('../stores/audio').then(({ useAudioStore }) => {
         const audioStore = useAudioStore.getState();
-        console.log('🔊 Audio state:', {
-          hasContext: !!audioStore.audioContext,
-          volume: audioStore.outputLevel,
-          muted: audioStore.muted,
-          connected: audioStore.connected
-        });
 
         if (audioStore.audioContext && audioStore.outputLevel > 0 && !audioStore.muted) {
           // Convert Buffer to ArrayBuffer
           const buffer = new Uint8Array(data.data).buffer;
-          console.log('🔊 Playing audio data, volume:', audioStore.outputLevel / 100);
           this.playAudioData(buffer, audioStore.audioContext, audioStore.outputLevel / 100);
-        } else {
-          console.log('🔊 Audio blocked - context:', !!audioStore.audioContext, 'volume:', audioStore.outputLevel, 'muted:', audioStore.muted);
         }
       }).catch(() => {});
     });
@@ -248,16 +238,38 @@ class WebSocketService {
     });
   }
 
+  private audioQueue: ArrayBuffer[] = [];
+  private isPlaying = false;
+  private nextPlayTime = 0;
+
   private playAudioData(audioData: ArrayBuffer, audioContext: AudioContext, volume: number): void {
     try {
-      console.log('🔊 playAudioData called with', audioData.byteLength, 'bytes, volume:', volume);
+      if (audioData.byteLength === 0) return;
 
-      if (audioData.byteLength === 0) {
-        console.warn('🔊 Empty audio data received');
-        return;
+      // Add to queue for smooth playback
+      this.audioQueue.push(audioData);
+
+      // Start playback if not already playing
+      if (!this.isPlaying) {
+        this.isPlaying = true;
+        this.nextPlayTime = audioContext.currentTime;
+        this.processAudioQueue(audioContext, volume);
       }
+    } catch (error) {
+      console.error('🔊 Failed to queue audio data:', error);
+    }
+  }
 
-      // Convert audio data to AudioBuffer and play it
+  private processAudioQueue(audioContext: AudioContext, volume: number): void {
+    if (this.audioQueue.length === 0) {
+      this.isPlaying = false;
+      return;
+    }
+
+    const audioData = this.audioQueue.shift()!;
+
+    try {
+      // Convert audio data to AudioBuffer
       const sampleCount = audioData.byteLength / 2; // 16-bit = 2 bytes per sample
       const audioBuffer = audioContext.createBuffer(1, sampleCount, 48000);
       const channelData = audioBuffer.getChannelData(0);
@@ -279,12 +291,19 @@ class WebSocketService {
       source.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      // Play the audio
-      source.start();
-      console.log('🔊 Audio playback started, duration:', audioBuffer.duration, 'seconds');
+      // Schedule playback for smooth streaming
+      source.start(this.nextPlayTime);
+      this.nextPlayTime += audioBuffer.duration;
+
+      // Process next chunk when this one finishes
+      source.onended = () => {
+        this.processAudioQueue(audioContext, volume);
+      };
 
     } catch (error) {
-      console.error('🔊 Failed to play audio data:', error);
+      console.error('🔊 Failed to play audio chunk:', error);
+      // Continue with next chunk
+      this.processAudioQueue(audioContext, volume);
     }
   }
 

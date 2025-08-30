@@ -205,7 +205,6 @@ export class AudioService extends EventEmitter {
       this.rxAudioProc = spawn('arecord', args);
 
       this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {
-        console.log(`🔊 Audio data captured: ${chunk.length} bytes`);
         this.rxAudioBuffer = Buffer.concat([this.rxAudioBuffer, chunk]);
         // Emit RX audio data for streaming to frontend
         this.emit(EVENTS.AUDIO_RX_DATA, { data: chunk });
