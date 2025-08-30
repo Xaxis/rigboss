@@ -51,6 +51,19 @@ function listAlsaCards(): Array<{ index: number; name: string }> {
   }
 }
 
+function prioritizeCards(cards: Array<{ index: number; name: string }>): Array<{ index: number; name: string }> {
+  // Prefer likely radio USB interfaces first
+  const preferred = ['CODEC', 'USB', 'Icom', 'IC-', 'Rig', 'Radio'];
+  return cards.slice().sort((a, b) => {
+    const ai = preferred.findIndex((p) => a.name.toLowerCase().includes(p.toLowerCase()));
+    const bi = preferred.findIndex((p) => b.name.toLowerCase().includes(p.toLowerCase()));
+    const as = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
+    const bs = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
+    if (as !== bs) return as - bs;
+    return a.index - b.index;
+  });
+}
+
 
 
 // Simple Hann window
@@ -112,7 +125,7 @@ export class SpectrumService extends EventEmitter {
     const configured = this.cfg.device;
     if (configured && configured !== 'AUTO') candidates.push(configured);
     if (process.platform === 'linux') {
-      const cards = listAlsaCards();
+      const cards = prioritizeCards(listAlsaCards());
       for (const c of cards) {
         candidates.push(`hw:CARD=${c.name},DEV=0`);
         candidates.push(`plughw:CARD=${c.name},DEV=0`);
@@ -145,6 +158,8 @@ export class SpectrumService extends EventEmitter {
     const proc = spawn(bin, args);
 
     let gotData = false;
+    // Give ALSA a moment to initialize stream before judging success
+    await new Promise((r) => setTimeout(r, 200));
     const onData = (chunk: Buffer) => {
       gotData = true;
       this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
