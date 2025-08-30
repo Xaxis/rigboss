@@ -100,6 +100,9 @@ export class SpectrumService extends EventEmitter {
     return this.getSettings();
   }
 
+
+    // Log ffmpeg invocation (once)
+    console.log('[Spectrum] ffmpeg args:', args.join(' '));
   start(): void {
     if (this.proc) return;
     // For now we only implement PCM via ffmpeg; IF/IQ adapters can be added later
@@ -118,6 +121,18 @@ export class SpectrumService extends EventEmitter {
 
     this.proc.stdout.on('data', (chunk: Buffer) => {
       this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
+    });
+
+    this.proc.on('error', (err) => {
+      this.emit(EVENTS.SPECTRUM_SETTINGS, { settings: this.getSettings(), available: false, error: String(err) });
+
+    let stderrLines = 0;
+    this.proc.stderr.on('data', (buf: Buffer) => {
+      if (stderrLines < 5) {
+        console.log('[Spectrum][ffmpeg]', buf.toString().trim());
+        stderrLines++;
+      }
+    });
     });
 
     this.proc.stderr.on('data', () => {

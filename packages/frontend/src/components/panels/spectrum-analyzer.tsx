@@ -20,12 +20,22 @@ export function SpectrumAnalyzerPanel() {
 
   useEffect(() => {
     // Initialize spectrum via WebSocket-only settings; backend selects best source
-    if (!connected) {
-      import('@/services/websocket').then(({ getWebSocketService }) => {
-        const ws = getWebSocketService();
-        ws.emit('spectrum:settings:set', { source: 'AUTO' });
-      });
-    }
+    let unsub: (() => void) | null = null;
+    import('@/services/websocket').then(({ getWebSocketService }) => {
+      const ws = getWebSocketService();
+      const sendInit = () => ws.emit('spectrum:settings:set', { source: 'AUTO' });
+      if (ws.isConnected()) {
+        sendInit();
+      } else {
+        unsub = ws.subscribe('connection_state', (st: any) => {
+          if (st?.connected) {
+            sendInit();
+            unsub?.();
+          }
+        });
+      }
+    });
+    return () => { unsub?.(); };
   }, [connected]);
 
   if (fullscreen) {

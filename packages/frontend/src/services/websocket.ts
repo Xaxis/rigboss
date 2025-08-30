@@ -156,6 +156,10 @@ class WebSocketService {
       });
     });
 
+
+    // Debug: log spectrum events
+    this.socket.on('spectrum:frame', () => console.log('🎛️ spectrum:frame received'));
+    this.socket.on('spectrum:settings', (data: any) => console.log('🎛️ spectrum:settings', data));
     // Listen for spectrum frames
     this.socket.on('spectrum:frame', (data: any) => {
       import('../stores/spectrum').then(({ useSpectrumStore }) => {

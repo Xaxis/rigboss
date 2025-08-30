@@ -18,6 +18,9 @@ const EnvSchema = z.object({
   AUDIO_SAMPLE_RATE: z.coerce.number().int().positive().default(48000),
   AUDIO_BUFFER_SIZE: z.coerce.number().int().positive().default(1024),
 
+  // Spectrum/audio capture configuration
+  SPECTRUM_DEVICE: z.string().default('default'),
+
   // Cross-network configuration
   CORS_ORIGIN: z.string().default('*'),
   FRONTEND_URL: z.string().url().optional(),
@@ -50,6 +53,7 @@ export const config = loadConfig();
 
 // Log configuration on startup
 console.log('🔧 Configuration loaded:');
+console.log(`  Spectrum device: ${config.SPECTRUM_DEVICE}`);
 console.log(`  Server: ${config.HOST}:${config.PORT}`);
 console.log(`  Rigctld: ${config.RIGCTLD_HOST}:${config.RIGCTLD_PORT}`);
 console.log(`  Audio: ${config.AUDIO_ENABLED ? 'enabled' : 'disabled'}`);

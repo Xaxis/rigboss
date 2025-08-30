@@ -43,7 +43,7 @@ async function main() {
     bufferSize: config.AUDIO_BUFFER_SIZE,
   });
 
-  const spectrumService = new SpectrumService({ sampleRate: config.AUDIO_SAMPLE_RATE });
+  const spectrumService = new SpectrumService({ sampleRate: config.AUDIO_SAMPLE_RATE, device: config.SPECTRUM_DEVICE });
 
   // Initialize Socket.IO
   const io = new SocketIOServer(fastify.server, {
