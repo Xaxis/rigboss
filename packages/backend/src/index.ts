@@ -291,6 +291,12 @@ async function main() {
     io.emit(EVENTS.AUDIO_TX_DATA, data);
   });
 
+  // Connect audio service to spectrum service for shared audio stream
+  spectrumService.on('pcm-data', (data: Buffer) => {
+    // Forward spectrum PCM data to audio service for streaming
+    audioService.emit('audio:rx_data', { data: Array.from(data) });
+  });
+
   // Start spectrum after radio connected so center coupling can work
   try {
     spectrumService.start();

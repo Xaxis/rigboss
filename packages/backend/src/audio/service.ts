@@ -184,25 +184,13 @@ export class AudioService extends EventEmitter {
   }
 
   private async startRXAudio(): Promise<void> {
-    // Use the EXACT SAME approach as spectrum analyzer!
-    const audioDevice = 'sysdefault:CARD=CODEC';
+    // DON'T start separate audio capture - spectrum service already captures the same audio!
+    // Instead, we'll get audio data from the spectrum service
+    console.log('🔊 Audio service will receive data from spectrum service (shared audio stream)');
 
-    console.log(`🔊 Starting RX audio from: ${audioDevice}`);
-
-    try {
-      // Use arecord (same as spectrum) instead of ffmpeg
-      const args = [
-        '-D', audioDevice,
-        '-f', 'S16_LE',
-        '-r', String(this.config.sampleRate),
-        '-c', '1',  // Mono
-        '-q',       // Quiet
-        '-t', 'raw',
-        '-'         // Output to stdout
-      ];
-
-      console.log('🔊 Audio capture args (arecord):', args.join(' '));
-      this.rxAudioProc = spawn('arecord', args);
+    // The audio streaming will be handled by connecting to spectrum service events
+    // This avoids device conflicts since only one process can capture from audio device
+    return;
 
       this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {
         this.rxAudioBuffer = Buffer.concat([this.rxAudioBuffer, chunk]);
