@@ -250,6 +250,8 @@ export class SpectrumService extends EventEmitter {
     proc.stdout.off('data', onData);
     this.proc.stdout.on('data', (chunk: Buffer) => {
       this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
+      // Emit raw PCM data for audio service
+      this.emit('pcm-data', chunk);
     });
     this.proc.on('error', (err) => {
       this.emit(EVENTS.SPECTRUM_SETTINGS, { settings: this.getSettings(), available: false, error: String(err) });

@@ -188,8 +188,12 @@ export class AudioService extends EventEmitter {
     // Instead, we'll get audio data from the spectrum service
     console.log('🔊 Audio service will receive data from spectrum service (shared audio stream)');
 
-    // The audio streaming will be handled by connecting to spectrum service events
-    // This avoids device conflicts since only one process can capture from audio device
+    // Set up listener for shared audio data from spectrum service
+    this.on(EVENTS.AUDIO_RX_DATA, (data) => {
+      console.log('🔊 Audio service received shared data:', data.data?.length || 0, 'bytes');
+      // This data will be automatically relayed to frontend via the main server event relay
+    });
+
     return;
   }
 
