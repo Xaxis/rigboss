@@ -110,21 +110,28 @@ export const useAudioStore = create<AudioStore>()(
 
     startAudio: async () => {
       try {
+        console.log('🔊 FRONTEND: Starting audio...');
+
         // Create audio context first
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        console.log('🔊 FRONTEND: Audio context created, state:', audioContext.state);
 
         // Resume audio context if suspended (required for user interaction)
         if (audioContext.state === 'suspended') {
           await audioContext.resume();
+          console.log('🔊 FRONTEND: Audio context resumed, state:', audioContext.state);
         }
 
         set({ audioContext, connected: true });
+        console.log('🔊 FRONTEND: Audio store updated');
 
         // Start backend audio service
+        console.log('🔊 FRONTEND: Starting backend audio service...');
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
 
         await ws.emitWithAck('audio:start', {});
+        console.log('🔊 FRONTEND: Backend audio service started');
 
         // Get user media for input (TX audio) - optional
         try {
