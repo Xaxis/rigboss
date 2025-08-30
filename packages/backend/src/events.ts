@@ -14,6 +14,10 @@ export const EVENTS = {
   // Audio events
   AUDIO_LEVEL: 'audio:level',
   AUDIO_ERROR: 'audio:error',
+  AUDIO_STARTED: 'audio:started',
+  AUDIO_STOPPED: 'audio:stopped',
+  AUDIO_RX_DATA: 'audio:rx_data',
+  AUDIO_TX_DATA: 'audio:tx_data',
 
   // System events
   SYSTEM_STATUS: 'system:status',

@@ -203,6 +203,26 @@ class WebSocketService {
       }).catch(() => {}); // Audio store might not exist yet
     });
 
+    // Listen for audio events
+    this.socket.on('audio:started', (data: any) => {
+      import('../stores/audio').then(({ useAudioStore }) => {
+        useAudioStore.getState().setConnected(true);
+      }).catch(() => {});
+    });
+
+    this.socket.on('audio:stopped', (data: any) => {
+      import('../stores/audio').then(({ useAudioStore }) => {
+        useAudioStore.getState().setConnected(false);
+      }).catch(() => {});
+    });
+
+    this.socket.on('audio:error', (data: any) => {
+      console.error('🔊 Audio error:', data);
+      import('../stores/audio').then(({ useAudioStore }) => {
+        useAudioStore.getState().setConnected(false);
+      }).catch(() => {});
+    });
+
     // Listen for system status
     this.socket.on('system:status', (data: any) => {
       console.log('🖥️ System status:', data);

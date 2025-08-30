@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
+import ffmpegPath from 'ffmpeg-static';
 import type { AudioConfig, AudioLevel, AudioDevice } from './types.js';
 import { EVENTS } from '../events.js';
 
@@ -8,6 +10,17 @@ export class AudioService extends EventEmitter {
   private outputLevel = 0;
   private active = false;
   private levelTimer: NodeJS.Timeout | null = null;
+
+  // Audio streaming processes
+  private rxAudioProc: ChildProcessWithoutNullStreams | null = null;
+  private txAudioProc: ChildProcessWithoutNullStreams | null = null;
+  private rxAudioBuffer = Buffer.alloc(0);
+  private txAudioBuffer = Buffer.alloc(0);
+
+  // Audio devices
+  private availableDevices: AudioDevice[] = [];
+  private selectedInputDevice: string | null = null;
+  private selectedOutputDevice: string | null = null;
 
   constructor(config: AudioConfig) {
     super();
@@ -21,21 +34,35 @@ export class AudioService extends EventEmitter {
     }
 
     try {
-      // TODO: Initialize audio system (portaudio, alsa, etc.)
-      // For now, just simulate audio levels
+      // Discover audio devices
+      await this.discoverAudioDevices();
+
+      // Start RX audio capture (radio → computer speakers)
+      await this.startRXAudio();
+
       this.active = true;
       this.startLevelMonitoring();
       console.log('🔊 Audio service started');
+
+      this.emit(EVENTS.AUDIO_STARTED, {
+        devices: this.availableDevices,
+        rxDevice: this.selectedOutputDevice,
+        txDevice: this.selectedInputDevice
+      });
     } catch (error) {
+      console.error('Audio service start error:', error);
       this.emit(EVENTS.AUDIO_ERROR, { error: 'Failed to start audio' });
       throw error;
     }
   }
 
   async stop(): Promise<void> {
+    this.stopRXAudio();
+    this.stopTXAudio();
     this.stopLevelMonitoring();
     this.active = false;
     console.log('🔇 Audio service stopped');
+    this.emit(EVENTS.AUDIO_STOPPED);
   }
 
   isActive(): boolean {
@@ -51,26 +78,7 @@ export class AudioService extends EventEmitter {
   }
 
   async getDevices(): Promise<AudioDevice[]> {
-    // TODO: Implement actual device enumeration
-    // For now, return mock devices
-    return [
-      {
-        id: 'default-input',
-        name: 'Default Microphone',
-        type: 'input',
-        channels: 1,
-        sampleRate: 48000,
-        isDefault: true,
-      },
-      {
-        id: 'default-output',
-        name: 'Default Speakers',
-        type: 'output',
-        channels: 2,
-        sampleRate: 48000,
-        isDefault: true,
-      },
-    ];
+    return this.availableDevices;
   }
 
   setInputLevel(level: number): void {
@@ -81,23 +89,214 @@ export class AudioService extends EventEmitter {
     this.outputLevel = Math.max(0, Math.min(1, level));
   }
 
+  async startTXAudio(inputDeviceId?: string): Promise<void> {
+    if (this.txAudioProc) {
+      this.stopTXAudio();
+    }
+
+    const device = inputDeviceId || this.selectedInputDevice || 'default';
+    console.log(`🎤 Starting TX audio capture from: ${device}`);
+
+    try {
+      const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
+      const inputFmt = process.platform === 'linux' ? ['-f', 'alsa', '-i', device] : ['-f', 'avfoundation', '-i', ':0'];
+      const args = [
+        ...inputFmt,
+        '-ac', '1',  // Mono for TX
+        '-ar', String(this.config.sampleRate),
+        '-acodec', 'pcm_s16le',
+        '-f', 's16le',
+        'pipe:1',
+      ];
+
+      this.txAudioProc = spawn(bin, args);
+
+      this.txAudioProc.stdout.on('data', (chunk: Buffer) => {
+        this.txAudioBuffer = Buffer.concat([this.txAudioBuffer, chunk]);
+        // Emit TX audio data for transmission to radio
+        this.emit(EVENTS.AUDIO_TX_DATA, { data: chunk });
+      });
+
+      this.txAudioProc.on('error', (err) => {
+        console.error('TX audio error:', err);
+        this.emit(EVENTS.AUDIO_ERROR, { error: 'TX audio failed' });
+      });
+
+      this.selectedInputDevice = device;
+      console.log('🎤 TX audio started successfully');
+    } catch (error) {
+      console.error('Failed to start TX audio:', error);
+      throw error;
+    }
+  }
+
+  stopTXAudio(): void {
+    if (this.txAudioProc) {
+      try {
+        this.txAudioProc.kill('SIGTERM');
+      } catch {}
+      this.txAudioProc = null;
+      console.log('🎤 TX audio stopped');
+    }
+  }
+
+  private async discoverAudioDevices(): Promise<void> {
+    console.log('🔍 Discovering audio devices...');
+
+    // Common radio audio devices to look for
+    const radioDevices = [
+      { id: 'hw:CARD=CODEC,DEV=0', name: 'Icom IC-7300 Audio', type: 'both' },
+      { id: 'hw:CARD=USB,DEV=0', name: 'USB Radio Interface', type: 'both' },
+      { id: 'plughw:CARD=CODEC,DEV=0', name: 'Icom IC-7300 (ALSA)', type: 'both' },
+      { id: 'hw:1,0', name: 'USB Audio Device 1', type: 'both' },
+      { id: 'hw:2,0', name: 'USB Audio Device 2', type: 'both' },
+      { id: 'default', name: 'System Default', type: 'both' },
+    ];
+
+    this.availableDevices = [];
+
+    for (const device of radioDevices) {
+      // Test if device exists by trying to open it briefly
+      try {
+        const testArgs = ['-f', 'alsa', '-i', device.id, '-t', '0.1', '-f', 'null', '-'];
+        const testProc = spawn('ffmpeg', testArgs, { stdio: 'pipe' });
+
+        const success = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => resolve(false), 2000);
+          testProc.once('close', (code) => {
+            clearTimeout(timer);
+            resolve(code === 0);
+          });
+        });
+
+        if (success || device.id === 'default') {
+          if (device.type === 'both' || device.type === 'input') {
+            this.availableDevices.push({
+              id: device.id,
+              name: `${device.name} (Input)`,
+              type: 'input',
+              channels: 1,
+              sampleRate: this.config.sampleRate,
+              isDefault: device.id === 'default',
+            });
+          }
+          if (device.type === 'both' || device.type === 'output') {
+            this.availableDevices.push({
+              id: device.id,
+              name: `${device.name} (Output)`,
+              type: 'output',
+              channels: 2,
+              sampleRate: this.config.sampleRate,
+              isDefault: device.id === 'default',
+            });
+          }
+        }
+      } catch (error) {
+        // Device not available, skip
+      }
+    }
+
+    // Set default devices
+    const defaultOutput = this.availableDevices.find(d => d.type === 'output' && d.isDefault);
+    const defaultInput = this.availableDevices.find(d => d.type === 'input' && d.isDefault);
+
+    this.selectedOutputDevice = defaultOutput?.id || null;
+    this.selectedInputDevice = defaultInput?.id || null;
+
+    console.log(`🔍 Found ${this.availableDevices.length} audio devices`);
+  }
+
+  private async startRXAudio(): Promise<void> {
+    if (!this.selectedOutputDevice) {
+      console.log('🔊 No output device selected, skipping RX audio');
+      return;
+    }
+
+    console.log(`🔊 Starting RX audio to: ${this.selectedOutputDevice}`);
+
+    try {
+      // For now, capture from the same device used for spectrum
+      // In a real implementation, this would be the radio's demodulated audio output
+      const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
+      const inputFmt = process.platform === 'linux' ? ['-f', 'alsa', '-i', this.selectedOutputDevice] : ['-f', 'avfoundation', '-i', ':0'];
+      const args = [
+        ...inputFmt,
+        '-ac', '2',  // Stereo for RX
+        '-ar', String(this.config.sampleRate),
+        '-acodec', 'pcm_s16le',
+        '-f', 's16le',
+        'pipe:1',
+      ];
+
+      this.rxAudioProc = spawn(bin, args);
+
+      this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {
+        this.rxAudioBuffer = Buffer.concat([this.rxAudioBuffer, chunk]);
+        // Emit RX audio data for streaming to frontend
+        this.emit(EVENTS.AUDIO_RX_DATA, { data: chunk });
+      });
+
+      this.rxAudioProc.on('error', (err) => {
+        console.error('RX audio error:', err);
+        this.emit(EVENTS.AUDIO_ERROR, { error: 'RX audio failed' });
+      });
+
+      console.log('🔊 RX audio started successfully');
+    } catch (error) {
+      console.error('Failed to start RX audio:', error);
+      throw error;
+    }
+  }
+
+  private stopRXAudio(): void {
+    if (this.rxAudioProc) {
+      try {
+        this.rxAudioProc.kill('SIGTERM');
+      } catch {}
+      this.rxAudioProc = null;
+      console.log('🔊 RX audio stopped');
+    }
+  }
+
   private startLevelMonitoring(): void {
     if (this.levelTimer) return;
 
     this.levelTimer = setInterval(() => {
-      // TODO: Get actual audio levels from audio system
-      // For now, simulate realistic levels with some variation
-      const baseInput = this.inputLevel + (Math.random() - 0.5) * 0.1;
-      const baseOutput = this.outputLevel + (Math.random() - 0.5) * 0.1;
+      // Calculate actual audio levels from buffers
+      let inputLevel = 0;
+      let outputLevel = 0;
 
-      const inputLevel = Math.max(0, Math.min(1, baseInput));
-      const outputLevel = Math.max(0, Math.min(1, baseOutput));
+      if (this.txAudioBuffer.length > 0) {
+        inputLevel = this.calculateAudioLevel(this.txAudioBuffer);
+        this.txAudioBuffer = Buffer.alloc(0); // Clear buffer
+      }
+
+      if (this.rxAudioBuffer.length > 0) {
+        outputLevel = this.calculateAudioLevel(this.rxAudioBuffer);
+        this.rxAudioBuffer = Buffer.alloc(0); // Clear buffer
+      }
 
       this.emit(EVENTS.AUDIO_LEVEL, {
         input: inputLevel,
         output: outputLevel,
       } as AudioLevel);
     }, 50); // 20 FPS for smooth level meters
+  }
+
+  private calculateAudioLevel(buffer: Buffer): number {
+    if (buffer.length < 2) return 0;
+
+    let sum = 0;
+    const samples = buffer.length / 2; // 16-bit samples
+
+    for (let i = 0; i < buffer.length; i += 2) {
+      const sample = buffer.readInt16LE(i);
+      sum += Math.abs(sample);
+    }
+
+    const average = sum / samples;
+    const normalized = average / 32768; // Normalize to 0-1
+    return Math.min(1, normalized);
   }
 
   private stopLevelMonitoring(): void {

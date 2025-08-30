@@ -110,15 +110,21 @@ export const useAudioStore = create<AudioStore>()(
 
     startAudio: async () => {
       try {
+        // Start backend audio service
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+
+        await ws.emitWithAck('audio:start', {});
+
         const state = get();
-        
+
         // Create audio context if not exists
         if (!state.audioContext) {
           const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
           set({ audioContext });
         }
 
-        // Get user media for input
+        // Get user media for input (TX audio)
         if (state.selectedInputDevice) {
           const constraints = {
             audio: {
@@ -138,7 +144,7 @@ export const useAudioStore = create<AudioStore>()(
           const analyser = audioContext.createAnalyser();
           analyser.fftSize = 256;
           source.connect(analyser);
-          
+
           set({ analyserNode: analyser, connected: true });
         }
       } catch (error) {
@@ -147,13 +153,23 @@ export const useAudioStore = create<AudioStore>()(
       }
     },
 
-    stopAudio: () => {
+    stopAudio: async () => {
+      try {
+        // Stop backend audio service
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+
+        await ws.emitWithAck('audio:stop', {});
+      } catch (error) {
+        console.error('Failed to stop backend audio:', error);
+      }
+
       const state = get();
-      
+
       if (state.inputStream) {
         state.inputStream.getTracks().forEach(track => track.stop());
       }
-      
+
       if (state.audioContext) {
         state.audioContext.close();
       }
@@ -176,19 +192,13 @@ export const useAudioStore = create<AudioStore>()(
       }
 
       try {
-        // Send recording command to backend
-        const response = await fetch('/api/audio/start-recording', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            inputDeviceId: state.selectedInputDevice,
-            inputLevel: state.inputLevel,
-          }),
-        });
+        // Start TX audio capture via WebSocket
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
 
-        if (!response.ok) {
-          throw new Error('Failed to start recording');
-        }
+        await ws.emitWithAck('audio:start_tx', {
+          deviceId: state.selectedInputDevice,
+        });
 
         set({ recording: true });
       } catch (error) {
@@ -199,9 +209,11 @@ export const useAudioStore = create<AudioStore>()(
 
     stopRecording: async () => {
       try {
-        await fetch('/api/audio/stop-recording', {
-          method: 'POST',
-        });
+        // Stop TX audio capture via WebSocket
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+
+        await ws.emitWithAck('audio:stop_tx', {});
 
         set({ recording: false });
       } catch (error) {

@@ -187,6 +187,52 @@ async function main() {
         callback?.(e.message || 'Failed to apply spectrum settings', null);
       }
     });
+
+    // Audio endpoints via WS
+    socket.on('audio:start', async (payload, callback) => {
+      try {
+        await audioService.start();
+        callback?.(null, { success: true });
+      } catch (e: any) {
+        callback?.(e.message || 'Failed to start audio', null);
+      }
+    });
+
+    socket.on('audio:stop', (payload, callback) => {
+      try {
+        audioService.stop();
+        callback?.(null, { success: true });
+      } catch (e: any) {
+        callback?.(e.message || 'Failed to stop audio', null);
+      }
+    });
+
+    socket.on('audio:get_devices', async (payload, callback) => {
+      try {
+        const devices = await audioService.getDevices();
+        callback?.(null, { devices });
+      } catch (e: any) {
+        callback?.(e.message || 'Failed to get audio devices', null);
+      }
+    });
+
+    socket.on('audio:start_tx', async (payload, callback) => {
+      try {
+        await audioService.startTXAudio(payload?.deviceId);
+        callback?.(null, { success: true });
+      } catch (e: any) {
+        callback?.(e.message || 'Failed to start TX audio', null);
+      }
+    });
+
+    socket.on('audio:stop_tx', (payload, callback) => {
+      try {
+        audioService.stopTXAudio();
+        callback?.(null, { success: true });
+      } catch (e: any) {
+        callback?.(e.message || 'Failed to stop TX audio', null);
+      }
+    });
   });
 
   // Event relay: Service events → WebSocket broadcasts
@@ -216,6 +262,33 @@ async function main() {
 
   radioService.on(EVENTS.RADIO_ERROR, (data) => {
     io.emit(EVENTS.RADIO_ERROR, data);
+  });
+
+  // Audio event relay
+  audioService.on(EVENTS.AUDIO_LEVEL, (data) => {
+    io.emit(EVENTS.AUDIO_LEVEL, data);
+  });
+
+  audioService.on(EVENTS.AUDIO_ERROR, (data) => {
+    io.emit(EVENTS.AUDIO_ERROR, data);
+  });
+
+  audioService.on(EVENTS.AUDIO_STARTED, (data) => {
+    io.emit(EVENTS.AUDIO_STARTED, data);
+  });
+
+  audioService.on(EVENTS.AUDIO_STOPPED, (data) => {
+    io.emit(EVENTS.AUDIO_STOPPED, data);
+  });
+
+  audioService.on(EVENTS.AUDIO_RX_DATA, (data) => {
+    // Stream RX audio data to all connected clients
+    io.emit(EVENTS.AUDIO_RX_DATA, data);
+  });
+
+  audioService.on(EVENTS.AUDIO_TX_DATA, (data) => {
+    // TX audio data (for monitoring/feedback)
+    io.emit(EVENTS.AUDIO_TX_DATA, data);
   });
 
   // Start spectrum after radio connected so center coupling can work
