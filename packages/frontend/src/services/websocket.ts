@@ -115,7 +115,6 @@ class WebSocketService {
 
     // Listen for radio state updates (matches backend EVENTS.RADIO_STATE)
     this.socket.on('radio:state', (data: any) => {
-      console.log('📻 Frontend received radio state:', data);
       try {
         import('../stores/radio').then(({ useRadioStore }) => {
           useRadioStore.getState().updateFromBackend(data.state);
@@ -157,9 +156,6 @@ class WebSocketService {
     });
 
 
-    // Debug: log spectrum events
-    this.socket.on('spectrum:frame', () => console.log('🎛️ spectrum:frame received'));
-    this.socket.on('spectrum:settings', (data: any) => console.log('🎛️ spectrum:settings', data));
     // Listen for spectrum frames
     this.socket.on('spectrum:frame', (data: any) => {
       import('../stores/spectrum').then(({ useSpectrumStore }) => {
@@ -223,10 +219,73 @@ class WebSocketService {
       }).catch(() => {});
     });
 
+    // Listen for RX audio data and play it
+    this.socket.on('audio:rx_data', (data: any) => {
+      console.log('🔊 Received audio data:', data.data?.length || 0, 'bytes');
+      import('../stores/audio').then(({ useAudioStore }) => {
+        const audioStore = useAudioStore.getState();
+        console.log('🔊 Audio state:', {
+          hasContext: !!audioStore.audioContext,
+          volume: audioStore.outputLevel,
+          muted: audioStore.muted,
+          connected: audioStore.connected
+        });
+
+        if (audioStore.audioContext && audioStore.outputLevel > 0 && !audioStore.muted) {
+          // Convert Buffer to ArrayBuffer
+          const buffer = new Uint8Array(data.data).buffer;
+          console.log('🔊 Playing audio data, volume:', audioStore.outputLevel / 100);
+          this.playAudioData(buffer, audioStore.audioContext, audioStore.outputLevel / 100);
+        } else {
+          console.log('🔊 Audio blocked - context:', !!audioStore.audioContext, 'volume:', audioStore.outputLevel, 'muted:', audioStore.muted);
+        }
+      }).catch(() => {});
+    });
+
     // Listen for system status
     this.socket.on('system:status', (data: any) => {
       console.log('🖥️ System status:', data);
     });
+  }
+
+  private playAudioData(audioData: ArrayBuffer, audioContext: AudioContext, volume: number): void {
+    try {
+      console.log('🔊 playAudioData called with', audioData.byteLength, 'bytes, volume:', volume);
+
+      if (audioData.byteLength === 0) {
+        console.warn('🔊 Empty audio data received');
+        return;
+      }
+
+      // Convert audio data to AudioBuffer and play it
+      const sampleCount = audioData.byteLength / 2; // 16-bit = 2 bytes per sample
+      const audioBuffer = audioContext.createBuffer(1, sampleCount, 48000);
+      const channelData = audioBuffer.getChannelData(0);
+
+      // Convert 16-bit PCM to float32
+      const view = new Int16Array(audioData);
+      for (let i = 0; i < view.length; i++) {
+        channelData[i] = view[i] / 32768.0;
+      }
+
+      // Create audio nodes
+      const source = audioContext.createBufferSource();
+      const gainNode = audioContext.createGain();
+
+      source.buffer = audioBuffer;
+      gainNode.gain.value = volume;
+
+      // Connect: source -> gain -> destination
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      // Play the audio
+      source.start();
+      console.log('🔊 Audio playback started, duration:', audioBuffer.duration, 'seconds');
+
+    } catch (error) {
+      console.error('🔊 Failed to play audio data:', error);
+    }
   }
 
   disconnect(): void {
@@ -250,7 +309,7 @@ class WebSocketService {
     }
   }
 
-  async emitWithAck<T = any>(event: string, data?: any, timeoutMs = 8000): Promise<T> {
+  async emitWithAck<T = any>(event: string, data?: any, timeoutMs = 15000): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (!this.socket || !this.socket.connected) {
         reject(new Error('WebSocket not connected'));

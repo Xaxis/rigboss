@@ -207,27 +207,62 @@ export class AudioService extends EventEmitter {
   }
 
   private async startRXAudio(): Promise<void> {
-    if (!this.selectedOutputDevice) {
-      console.log('🔊 No output device selected, skipping RX audio');
+    // For RX audio, we need to capture from radio audio OUTPUT (not computer speakers!)
+    // Try radio audio devices first, fallback to default input
+    const radioAudioDevices = [
+      'hw:CARD=CODEC,DEV=0',     // Icom IC-7300 audio output
+      'plughw:CARD=CODEC,DEV=0', // Icom with ALSA plugin
+      'hw:CARD=USB,DEV=0',       // Generic USB radio interface
+      'hw:1,0',                  // USB audio device
+      'default',                 // System default input
+    ];
+
+    let audioDevice = null;
+
+    // Find working radio audio device
+    for (const device of radioAudioDevices) {
+      try {
+        console.log(`🔊 Testing RX audio device: ${device}`);
+        const testArgs = ['-f', 'alsa', '-i', device, '-t', '0.1', '-f', 'null', '-'];
+        const testProc = spawn('ffmpeg', testArgs, { stdio: 'pipe' });
+
+        const success = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => resolve(false), 2000);
+          testProc.once('close', (code) => {
+            clearTimeout(timer);
+            resolve(code === 0);
+          });
+        });
+
+        if (success) {
+          audioDevice = device;
+          break;
+        }
+      } catch (error) {
+        // Try next device
+      }
+    }
+
+    if (!audioDevice) {
+      console.log('🔊 No radio audio device found, skipping RX audio');
       return;
     }
 
-    console.log(`🔊 Starting RX audio to: ${this.selectedOutputDevice}`);
+    console.log(`🔊 Starting RX audio from radio device: ${audioDevice}`);
 
     try {
-      // For now, capture from the same device used for spectrum
-      // In a real implementation, this would be the radio's demodulated audio output
       const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
-      const inputFmt = process.platform === 'linux' ? ['-f', 'alsa', '-i', this.selectedOutputDevice] : ['-f', 'avfoundation', '-i', ':0'];
       const args = [
-        ...inputFmt,
-        '-ac', '2',  // Stereo for RX
+        '-f', 'alsa',
+        '-i', audioDevice,
+        '-ac', '1',  // Mono for radio audio
         '-ar', String(this.config.sampleRate),
         '-acodec', 'pcm_s16le',
         '-f', 's16le',
         'pipe:1',
       ];
 
+      console.log('[Audio] RX capture args:', args.join(' '));
       this.rxAudioProc = spawn(bin, args);
 
       this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {

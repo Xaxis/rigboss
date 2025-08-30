@@ -1,61 +1,64 @@
-import React, { useEffect } from 'react';
-import { Volume2, Mic, MicOff, Play, Square, Settings } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Volume2, Mic, MicOff, Play, Square, Settings, Radio, Headphones } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { AudioDeviceSelector } from '@/components/audio/audio-device-selector';
 import { AudioLevelMeter } from '@/components/audio/audio-level-meter';
-import { AudioControls } from '@/components/audio/audio-controls';
-import { AudioProcessing } from '@/components/audio/audio-processing';
-import { useAudioStore, useAudioConnected, useAudioRecording, useAudioPlaying } from '@/stores/audio';
-import { useSettings } from '@/stores/ui';
+import { useAudioStore, useAudioConnected, useAudioOutputLevel, useAudioInputLevel, useAudioMuted } from '@/stores/audio';
+import { useRadioStore } from '@/stores/radio';
 import { toast } from '@/stores/ui';
 import { cn } from '@/lib/utils';
 
 export function AudioSystemPanel() {
-  const { refreshDevices, startAudio, stopAudio } = useAudioStore();
+  const audioStore = useAudioStore();
   const connected = useAudioConnected();
-  const recording = useAudioRecording();
-  const playing = useAudioPlaying();
-  const settings = useSettings();
+  const outputLevel = useAudioOutputLevel();
+  const inputLevel = useAudioInputLevel();
+  const muted = useAudioMuted();
+  const { ptt } = useRadioStore();
+
+  const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
     // Refresh audio devices on mount
-    refreshDevices().catch((error) => {
+    audioStore.refreshDevices().catch((error) => {
       console.error('Failed to refresh audio devices:', error);
       toast.error('Audio Error', 'Failed to access audio devices');
     });
-  }, [refreshDevices]);
-
-  useEffect(() => {
-    // Auto-start audio if enabled in settings
-    if (settings.audioAutoStart && !connected) {
-      handleStartAudio();
-    }
-  }, [settings.audioAutoStart, connected]);
+  }, [audioStore]);
 
   const handleStartAudio = async () => {
+    setIsStarting(true);
     try {
-      await startAudio();
-      toast.success('Audio Started', 'Audio system is now active');
+      await audioStore.startAudio();
+      toast.success('Audio Active', 'Radio audio is now streaming');
     } catch (error) {
-      toast.error('Audio Failed', error instanceof Error ? error.message : 'Unknown error');
+      toast.error('Audio Failed', error instanceof Error ? error.message : 'Failed to start audio');
+    } finally {
+      setIsStarting(false);
     }
   };
 
-  const handleStopAudio = () => {
-    stopAudio();
-    toast.info('Audio Stopped', 'Audio system deactivated');
+  const handleStopAudio = async () => {
+    try {
+      await audioStore.stopAudio();
+      toast.info('Audio Stopped', 'Radio audio stopped');
+    } catch (error) {
+      toast.error('Stop Failed', 'Failed to stop audio');
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Audio System Header */}
+      {/* Audio System Status & Control */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Volume2 className="h-5 w-5" />
-            Audio System
+            <Radio className="h-5 w-5" />
+            Radio Audio System
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -63,37 +66,57 @@ export function AudioSystemPanel() {
             <div className="flex items-center gap-4">
               <div className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium',
-                connected 
+                connected
                   ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  : isStarting
+                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                  : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
               )}>
                 <div className={cn(
                   'w-2 h-2 rounded-full',
-                  connected ? 'bg-green-500' : 'bg-red-500'
+                  connected ? 'bg-green-500' : isStarting ? 'bg-yellow-500 animate-pulse' : 'bg-gray-500'
                 )} />
-                {connected ? 'Active' : 'Inactive'}
+                {connected ? 'Audio Active' : isStarting ? 'Connecting...' : 'Audio Stopped'}
               </div>
-              
+
               <div className="text-sm text-muted-foreground">
-                Professional audio I/O for ham radio operations
+                {connected
+                  ? 'Radio audio streaming • Microphone ready for PTT'
+                  : isStarting
+                  ? 'Initializing audio devices and connections...'
+                  : 'Start audio to hear your radio and enable microphone'
+                }
               </div>
             </div>
-            
+
             <div className="flex gap-2">
               {connected ? (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={handleStopAudio}
+                  disabled={isStarting}
                 >
                   <Square className="h-4 w-4 mr-2" />
                   Stop Audio
                 </Button>
               ) : (
-                <Button 
+                <Button
                   onClick={handleStartAudio}
+                  disabled={isStarting}
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700"
                 >
-                  <Play className="h-4 w-4 mr-2" />
-                  Start Audio
+                  {isStarting ? (
+                    <>
+                      <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Start Audio
+                    </>
+                  )}
                 </Button>
               )}
             </div>
@@ -101,138 +124,164 @@ export function AudioSystemPanel() {
         </CardContent>
       </Card>
 
-      {/* Main Audio Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Radio Audio Section */}
-        <div className="space-y-6">
+      {/* Audio Controls - Only show when audio is active */}
+      {connected && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* RX Audio Control */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                📡 Radio Audio
+              <CardTitle className="flex items-center gap-2">
+                <Headphones className="h-4 w-4" />
+                Radio Audio (RX)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground mb-4">
-                Audio from radio to computer speakers/headphones
+              {/* Volume Control */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Volume</label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => audioStore.setMuted(!muted)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {muted ? <MicOff className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                    </Button>
+                    <span className="text-xs text-muted-foreground w-8">{Math.round(outputLevel)}%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[outputLevel]}
+                  onValueChange={([value]) => audioStore.setOutputLevel(value)}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                  disabled={muted}
+                />
               </div>
-              
-              {/* Radio Audio Output Device */}
+
+              {/* Audio Level Meter */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Output Device (Radio → Computer)</label>
+                <label className="text-sm font-medium">Signal Level</label>
+                <AudioLevelMeter type="output" />
+              </div>
+
+              {/* Device Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Output Device</label>
                 <ErrorBoundary>
                   <AudioDeviceSelector type="output" />
                 </ErrorBoundary>
               </div>
-              
-              {/* Radio Audio Level */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Radio Audio Level</label>
-                <AudioLevelMeter type="output" />
-              </div>
-              
-              {/* Radio Audio Status */}
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="text-sm font-medium mb-2">Radio Audio Status</div>
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  <div>Status: <span className={cn(
-                    "font-medium",
-                    connected ? "text-green-600" : "text-red-600"
-                  )}>
-                    {connected ? 'Receiving' : 'No Signal'}
-                  </span></div>
-                  <div>Quality: <span className="font-medium text-foreground">
-                    {connected ? 'Good' : 'N/A'}
-                  </span></div>
-                  <div>Latency: <span className="font-medium text-foreground">
-                    {connected ? '< 10ms' : 'N/A'}
-                  </span></div>
-                </div>
-              </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Computer Audio Section */}
-        <div className="space-y-6">
+          {/* TX Audio Control */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                🎤 Computer Audio
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="h-4 w-4" />
+                Microphone (TX)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground mb-4">
-                Audio from computer microphone to radio
+              {/* Microphone Gain */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Gain</label>
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      'w-2 h-2 rounded-full',
+                      ptt ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                    )} />
+                    <span className="text-xs text-muted-foreground w-8">{Math.round(inputLevel)}%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[inputLevel]}
+                  onValueChange={([value]) => audioStore.setInputLevel(value)}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
               </div>
-              
-              {/* Computer Audio Input Device */}
+
+              {/* Audio Level Meter */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Input Device (Computer → Radio)</label>
+                <label className="text-sm font-medium">Input Level</label>
+                <AudioLevelMeter type="input" />
+              </div>
+
+              {/* Device Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Input Device</label>
                 <ErrorBoundary>
                   <AudioDeviceSelector type="input" />
                 </ErrorBoundary>
               </div>
-              
-              {/* Computer Audio Level */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Microphone Level</label>
-                <AudioLevelMeter type="input" />
-              </div>
-              
-              {/* Computer Audio Status */}
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="text-sm font-medium mb-2">Computer Audio Status</div>
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  <div>Status: <span className={cn(
-                    "font-medium",
-                    connected ? "text-green-600" : "text-red-600"
-                  )}>
-                    {connected ? 'Ready' : 'No Input'}
-                  </span></div>
-                  <div>Recording: <span className={cn(
-                    "font-medium",
-                    recording ? "text-blue-600" : "text-muted-foreground"
-                  )}>
-                    {recording ? 'Active' : 'Standby'}
-                  </span></div>
-                  <div>Processing: <span className="font-medium text-foreground">
-                    {connected ? 'Enabled' : 'Disabled'}
-                  </span></div>
+
+              {/* PTT Status */}
+              <div className={cn(
+                'p-3 rounded-lg border',
+                ptt
+                  ? 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                  : 'bg-gray-50 border-gray-200 dark:bg-gray-950 dark:border-gray-800'
+              )}>
+                <div className="text-sm font-medium">
+                  {ptt ? '🔴 TRANSMITTING' : '⚪ STANDBY'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {ptt ? 'Microphone is active' : 'Press PTT to transmit'}
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
-      </div>
+      )}
 
-      {/* Audio Controls */}
-      <AudioControls />
+      {/* Audio Setup Instructions - Only show when audio is stopped */}
+      {!connected && !isStarting && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Audio Setup Guide</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                To use ham radio audio with rigboss:
+              </div>
 
-      {/* Audio Processing */}
-      <AudioProcessing />
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">1</div>
+                  <div>
+                    <div className="font-medium">Connect radio audio output</div>
+                    <div className="text-muted-foreground">Connect your radio's audio output to your computer's line input or USB audio interface</div>
+                  </div>
+                </div>
 
-      {/* Audio Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Audio System Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <div className="font-medium text-muted-foreground">Sample Rate</div>
-              <div className="font-mono">48 kHz</div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</div>
+                  <div>
+                    <div className="font-medium">Connect microphone for TX</div>
+                    <div className="text-muted-foreground">Connect your computer microphone to radio audio input for transmission</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</div>
+                  <div>
+                    <div className="font-medium">Start audio system</div>
+                    <div className="text-muted-foreground">Click "Start Audio" to begin streaming radio audio and enable microphone for PTT</div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="font-medium text-muted-foreground">Bit Depth</div>
-              <div className="font-mono">16-bit</div>
-            </div>
-            <div>
-              <div className="font-medium text-muted-foreground">Channels</div>
-              <div className="font-mono">Stereo</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

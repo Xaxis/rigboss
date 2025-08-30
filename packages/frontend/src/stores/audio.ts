@@ -37,7 +37,7 @@ const initialState: AudioState = {
   selectedInputDevice: null,
   selectedOutputDevice: null,
   inputLevel: 50,
-  outputLevel: 75,
+  outputLevel: 30,  // Start at 30% so audio is audible when started
   muted: false,
   recording: false,
   playing: false,
@@ -110,45 +110,53 @@ export const useAudioStore = create<AudioStore>()(
 
     startAudio: async () => {
       try {
+        // Create audio context first
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+        // Resume audio context if suspended (required for user interaction)
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
+        set({ audioContext, connected: true });
+
         // Start backend audio service
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
 
         await ws.emitWithAck('audio:start', {});
 
-        const state = get();
+        // Get user media for input (TX audio) - optional
+        try {
+          const state = get();
+          if (state.selectedInputDevice) {
+            const constraints = {
+              audio: {
+                deviceId: { exact: state.selectedInputDevice },
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+              }
+            };
 
-        // Create audio context if not exists
-        if (!state.audioContext) {
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-          set({ audioContext });
-        }
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            set({ inputStream: stream });
 
-        // Get user media for input (TX audio)
-        if (state.selectedInputDevice) {
-          const constraints = {
-            audio: {
-              deviceId: { exact: state.selectedInputDevice },
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            }
-          };
+            // Create analyser for level monitoring
+            const source = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
 
-          const stream = await navigator.mediaDevices.getUserMedia(constraints);
-          set({ inputStream: stream });
-
-          // Create analyser for level monitoring
-          const audioContext = get().audioContext!;
-          const source = audioContext.createMediaStreamSource(stream);
-          const analyser = audioContext.createAnalyser();
-          analyser.fftSize = 256;
-          source.connect(analyser);
-
-          set({ analyserNode: analyser, connected: true });
+            set({ analyserNode: analyser });
+          }
+        } catch (micError) {
+          console.warn('Microphone access failed, continuing without TX audio:', micError);
+          // Continue without microphone - RX audio still works
         }
       } catch (error) {
         console.error('Failed to start audio:', error);
+        set({ connected: false });
         throw error;
       }
     },
@@ -252,10 +260,10 @@ export const useAudioStore = create<AudioStore>()(
     },
 
     updateLevels: (levels: { input: number; output: number }) => {
-      set({
-        inputLevel: levels.input,
-        outputLevel: levels.output,
-      });
+      // DON'T override user volume settings!
+      // These are just level meter readings, not volume controls
+      // TODO: Add separate meter level state if needed for level meters
+      // For now, just ignore these to prevent overriding user volume settings
     },
   }))
 );
