@@ -71,8 +71,10 @@ export class RadioService extends EventEmitter {
 
   // Core radio operations with optimistic updates
   async setFrequency(hz: number): Promise<void> {
-    await this.commands.setFrequency(hz);
-    this.state.frequencyHz = hz;
+    // Ensure frequency precision (round to nearest Hz)
+    const preciseHz = Math.round(hz);
+    await this.commands.setFrequency(preciseHz);
+    this.state.frequencyHz = preciseHz;
     this.emitState();
   }
 

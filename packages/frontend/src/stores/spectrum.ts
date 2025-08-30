@@ -48,7 +48,24 @@ export const useSpectrumStore = create<SpectrumStore>()(
     updateSettings: (newSettings: Partial<SpectrumSettings>) => {
       const currentSettings = get().settings;
       const updatedSettings = { ...currentSettings, ...newSettings };
+
+      // Ensure frequency precision (round to nearest Hz)
+      if ('centerHz' in newSettings) {
+        updatedSettings.centerHz = Math.round(newSettings.centerHz!);
+      }
+
       set({ settings: updatedSettings });
+
+      // Sync radio frequency if coupled and centerHz changed
+      if ('centerHz' in newSettings && updatedSettings.coupled) {
+        import('../stores/radio').then(({ useRadioStore }) => {
+          const radioStore = useRadioStore.getState();
+          const preciseFreq = Math.round(newSettings.centerHz!);
+          if (radioStore.frequencyHz !== preciseFreq) {
+            radioStore.setFrequency(preciseFreq);
+          }
+        });
+      }
 
       // For proper spectrum analyzer behavior:
       // - Backend provides wide, fixed frequency range
@@ -63,9 +80,9 @@ export const useSpectrumStore = create<SpectrumStore>()(
       if ('refLevel' in newSettings) backendSettings.refLevel = newSettings.refLevel;
       if ('coupled' in newSettings) backendSettings.coupled = newSettings.coupled;
 
-      // Only send centerHz to backend if coupled mode (follows radio frequency)
+      // Send centerHz to backend for radio tuning if coupled
       if ('centerHz' in newSettings && updatedSettings.coupled) {
-        backendSettings.centerHz = newSettings.centerHz;
+        backendSettings.centerHz = Math.round(newSettings.centerHz!);
       }
 
       if (Object.keys(backendSettings).length > 0) {

@@ -88,16 +88,16 @@ export function SpectrumDisplay({
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
         const x = e.clientX - rect.left;
-        const hzPerPixel = (frame.binSizeHz * frame.bins.length) / width;
-        const startHz = frame.startHz;
-        const tuneHz = startHz + x * hzPerPixel;
-        
-        // Emit tune command via WebSocket
-        import('@/services/websocket').then(({ getWebSocketService }) => {
-          const ws = getWebSocketService();
-          if (ws.isConnected()) {
-            ws.emit('radio:set_frequency', { frequencyHz: tuneHz });
-          }
+
+        // Calculate frequency based on display settings (not frame data)
+        const displayStartHz = settings.centerHz - settings.spanHz / 2;
+        const tuneHz = displayStartHz + (x / width) * settings.spanHz;
+        const preciseFreq = Math.round(tuneHz); // Round to nearest Hz
+
+        // Use radio store for proper frequency sync
+        import('@/stores/radio').then(({ useRadioStore }) => {
+          const radioStore = useRadioStore.getState();
+          radioStore.setFrequency(preciseFreq);
         });
       }
     }
@@ -132,8 +132,8 @@ export function SpectrumDisplay({
     const newCenterHz = mouseFreq - (mouseRatio - 0.5) * newSpan;
 
     updateSettings({
-      spanHz: newSpan,
-      centerHz: newCenterHz
+      spanHz: Math.round(newSpan),
+      centerHz: Math.round(newCenterHz)
     });
   }, [mousePos, width, settings.spanHz, settings.centerHz, updateSettings]);
 

@@ -79,9 +79,11 @@ export function SpectrumControlPanel({ variant }: SpectrumControlPanelProps) {
   const radioFreq = useRadioStore((s) => s.frequencyHz);
 
   const handleCenterFreqChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(e.target.value) * 1000000; // MHz to Hz
-    if (!isNaN(value) && value > 0) {
-      updateSettings({ centerHz: value });
+    const mhzValue = parseFloat(e.target.value);
+    if (!isNaN(mhzValue) && mhzValue > 0) {
+      // Convert MHz to Hz with proper precision (round to nearest Hz)
+      const hzValue = Math.round(mhzValue * 1000000);
+      updateSettings({ centerHz: hzValue });
     }
   };
 

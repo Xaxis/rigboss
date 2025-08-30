@@ -85,14 +85,24 @@ export const useRadioStore = create<RadioStore>()(
     },
 
     setFrequency: async (frequency: number) => {
+      // Ensure frequency precision (round to nearest Hz)
+      const preciseFrequency = Math.round(frequency);
       const oldFrequency = get().frequencyHz;
-      set({ frequencyHz: frequency }); // Optimistic update
+      set({ frequencyHz: preciseFrequency }); // Optimistic update
+
+      // Sync spectrum analyzer if coupled
+      import('../stores/spectrum').then(({ useSpectrumStore }) => {
+        const spectrumStore = useSpectrumStore.getState();
+        if (spectrumStore.settings.coupled) {
+          spectrumStore.updateSettings({ centerHz: preciseFrequency });
+        }
+      });
 
       try {
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
         try {
-          await ws.emitWithAck('radio:setFrequency', { frequency });
+          await ws.emitWithAck('radio:setFrequency', { frequency: preciseFrequency });
         } catch (e) {
           set({ frequencyHz: oldFrequency });
           throw e;
@@ -237,6 +247,18 @@ export const useRadioStore = create<RadioStore>()(
     },
 
     updateFromBackend: (data: Partial<RadioState>) => {
+      const currentState = get();
+
+      // Sync spectrum analyzer if frequency changed and coupled
+      if (data.frequencyHz && data.frequencyHz !== currentState.frequencyHz) {
+        import('../stores/spectrum').then(({ useSpectrumStore }) => {
+          const spectrumStore = useSpectrumStore.getState();
+          if (spectrumStore.settings.coupled) {
+            spectrumStore.updateSettings({ centerHz: data.frequencyHz });
+          }
+        });
+      }
+
       // Simple, reliable state update
       set((state) => ({ ...state, ...data }));
     },
