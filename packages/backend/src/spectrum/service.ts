@@ -184,6 +184,48 @@ export class SpectrumService extends EventEmitter {
     if (!success) {
       try { proc.kill('SIGTERM'); } catch {}
       return false;
+
+  private async tryStartWithArecord(device: string): Promise<boolean> {
+    const args = ['-D', device, '-f', 'S16_LE', '-r', String(this.cfg.sampleRate), '-c', '1', '-q', '-t', 'raw', '-'];
+    console.log('[Spectrum] arecord args:', args.join(' '));
+    const proc = spawn('arecord', args);
+
+    let gotData = false;
+    const onData = (chunk: Buffer) => {
+      gotData = true;
+      this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
+    };
+
+    // Give ALSA a moment
+    await new Promise((r) => setTimeout(r, 200));
+    proc.stdout.on('data', onData);
+
+    const success = await new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => resolve(gotData), 4000);
+      proc.once('close', () => resolve(false));
+    });
+
+    if (!success) {
+      try { proc.kill('SIGTERM'); } catch {}
+      return false;
+    }
+
+    // Success: adopt
+    this.proc = proc as ChildProcessWithoutNullStreams;
+    proc.stdout.off('data', onData);
+    this.proc.stdout.on('data', (chunk: Buffer) => {
+      this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
+    });
+    this.proc.on('error', (err) => {
+      this.emit(EVENTS.SPECTRUM_SETTINGS, { settings: this.getSettings(), available: false, error: String(err) });
+    });
+    this.proc.on('close', () => {
+      this.proc = null;
+      this.setUnavailable();
+    });
+
+    return true;
+  }
     }
 
     // Success: adopt this process
@@ -229,7 +271,11 @@ export class SpectrumService extends EventEmitter {
     let started = false;
     for (const dev of devices) {
       this.pcmBuffer = Buffer.alloc(0);
-      const ok = await this.tryStartForDevice(dev);
+      let ok = await this.tryStartForDevice(dev);
+      if (!ok) {
+        // Fallback to arecord if ffmpeg ALSA failed
+        ok = await this.tryStartWithArecord(dev);
+      }
       if (ok) {
         console.log('[Spectrum] capture device selected:', dev);
         started = true;
