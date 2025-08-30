@@ -3,7 +3,7 @@ import { Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { useRadioPower, useRadioConnected, useRadioStore } from '@/stores/radio';
+import { useRadioConnected, useRadioStore } from '@/stores/radio';
 import { formatPower } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -16,9 +16,8 @@ const powerPresets = [
 ];
 
 export function PowerControl() {
-  const power = useRadioPower();
+  const { power, setPower } = useRadioStore();
   const connected = useRadioConnected();
-  const { setPower } = useRadioStore();
 
   const handlePowerChange = (value: number[]) => {
     setPower(value[0]);
@@ -54,12 +53,12 @@ export function PowerControl() {
         <div className="text-center">
           <div className={cn(
             "text-3xl font-bold font-mono",
-            connected ? getPowerColor(power) : "text-muted-foreground"
+            connected ? getPowerColor(power || 0) : "text-muted-foreground"
           )}>
-            {formatPower(power)}
+            {formatPower(power || 0)}
           </div>
           <div className="text-sm text-muted-foreground">
-            {getPowerLevel(power)} Power
+            {getPowerLevel(power || 0)} Power
           </div>
         </div>
 
@@ -71,7 +70,7 @@ export function PowerControl() {
           </div>
           
           <Slider
-            value={[power]}
+            value={[power || 0]}
             onValueChange={handlePowerChange}
             max={100}
             min={1}
@@ -115,23 +114,23 @@ export function PowerControl() {
           <div className="text-sm font-medium mb-2">Power Information</div>
           <div className="space-y-1 text-xs text-muted-foreground">
             <div>
-              Current Setting: <span className="font-medium text-foreground">{formatPower(power)}</span>
+              Current Setting: <span className="font-medium text-foreground">{formatPower(power || 0)}</span>
             </div>
             <div>
-              Power Level: <span className={cn("font-medium", getPowerColor(power))}>
-                {getPowerLevel(power)}
+              Power Level: <span className={cn("font-medium", getPowerColor(power || 0))}>
+                {getPowerLevel(power || 0)}
               </span>
             </div>
             <div>
               Efficiency: <span className="font-medium text-foreground">
-                {power <= 10 ? 'Maximum' : power <= 50 ? 'High' : 'Standard'}
+                {(power || 0) <= 10 ? 'Maximum' : (power || 0) <= 50 ? 'High' : 'Standard'}
               </span>
             </div>
           </div>
         </div>
 
         {/* Power Safety Warning */}
-        {power > 50 && (
+        {(power || 0) > 50 && (
           <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-900 dark:border-yellow-800">
             <div className="text-xs text-yellow-800 dark:text-yellow-200">
               ⚠️ High power setting - ensure proper antenna and cooling

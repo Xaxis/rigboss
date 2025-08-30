@@ -114,29 +114,65 @@ class WebSocketService {
     if (!this.socket) return;
 
     // Listen for radio state updates (matches backend EVENTS.RADIO_STATE)
-    this.socket.on('radio_state', (data: any) => {
+    this.socket.on('radio:state', (data: any) => {
       console.log('📻 Frontend received radio state:', data);
       try {
-        // Direct import avoids require in browser
         import('../stores/radio').then(({ useRadioStore }) => {
-          useRadioStore.getState().updateFromBackend({
-            connected: !!data.connected,
-            frequency: data.frequencyHz ?? data.frequency ?? 0,
-            mode: data.mode,
-            power: data.power ?? 0,
-            model: data.rigModel ?? '',
-          });
+          useRadioStore.getState().updateFromBackend(data.state);
         });
       } catch (e) {
         console.error('Failed to update radio store from WS data', e);
       }
     });
 
-    // Listen for connection status updates
-    this.socket.on('connection_status', (data: any) => {
+    // Listen for radio connection events
+    this.socket.on('radio:connected', (data: any) => {
+      console.log('📻 Radio connected:', data);
       import('../stores/radio').then(({ useRadioStore }) => {
-        useRadioStore.getState().updateFromBackend({ connected: !!data.connected });
+        useRadioStore.getState().updateFromBackend({ connected: true });
       });
+    });
+
+    this.socket.on('radio:disconnected', (data: any) => {
+      console.log('📻 Radio disconnected:', data);
+      import('../stores/radio').then(({ useRadioStore }) => {
+        useRadioStore.getState().updateFromBackend({ connected: false });
+      });
+    });
+
+    // Listen for radio capabilities
+    this.socket.on('radio:capabilities', (data: any) => {
+      console.log('📻 Radio capabilities:', data);
+      import('../stores/radio').then(({ useRadioStore }) => {
+        useRadioStore.getState().updateCapabilities(data.capabilities);
+      });
+    });
+
+    // Listen for radio errors
+    this.socket.on('radio:error', (data: any) => {
+      console.error('📻 Radio error:', data);
+      import('../stores/ui').then(({ toast }) => {
+        toast.error('Radio Error', data.error || 'Unknown radio error');
+      });
+    });
+
+    // Listen for spectrum frames
+    this.socket.on('spectrum:frame', (data: any) => {
+      import('../stores/spectrum').then(({ useSpectrumStore }) => {
+        useSpectrumStore.getState().updateFrame(data);
+      });
+    });
+
+    // Listen for audio levels
+    this.socket.on('audio:level', (data: any) => {
+      import('../stores/audio').then(({ useAudioStore }) => {
+        useAudioStore.getState().updateLevels(data);
+      }).catch(() => {}); // Audio store might not exist yet
+    });
+
+    // Listen for system status
+    this.socket.on('system:status', (data: any) => {
+      console.log('🖥️ System status:', data);
     });
   }
 

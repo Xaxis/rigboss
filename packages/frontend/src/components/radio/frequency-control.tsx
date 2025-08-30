@@ -3,7 +3,7 @@ import { Zap, Plus, Minus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useRadioFrequency, useRadioConnected, useRadioStore } from '@/stores/radio';
+import { useRadioConnected, useRadioStore } from '@/stores/radio';
 import { formatFrequency, parseFrequency, getFrequencyBand, isValidFrequency } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -32,14 +32,13 @@ const bandPresets = [
 ];
 
 export function FrequencyControl() {
-  const frequency = useRadioFrequency();
+  const { setFrequency, frequencyHz } = useRadioStore();
   const connected = useRadioConnected();
-  const { setFrequency } = useRadioStore();
   const [stepSize, setStepSize] = useState(1000);
   const [inputValue, setInputValue] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
-  const currentBand = getFrequencyBand(frequency);
+  const currentBand = getFrequencyBand(frequencyHz || 0);
 
   const handleFrequencyChange = (newFrequency: number) => {
     if (isValidFrequency(newFrequency)) {
@@ -48,15 +47,15 @@ export function FrequencyControl() {
   };
 
   const handleStepUp = () => {
-    handleFrequencyChange(frequency + stepSize);
+    handleFrequencyChange((frequencyHz || 0) + stepSize);
   };
 
   const handleStepDown = () => {
-    handleFrequencyChange(frequency - stepSize);
+    handleFrequencyChange((frequencyHz || 0) - stepSize);
   };
 
   const handleDirectInput = () => {
-    setInputValue(formatFrequency(frequency));
+    setInputValue(formatFrequency(frequencyHz || 0));
     setIsEditing(true);
   };
 
@@ -119,7 +118,7 @@ export function FrequencyControl() {
                   : "text-muted-foreground cursor-not-allowed"
               )}
             >
-              {formatFrequency(frequency)}
+              {formatFrequency(frequencyHz || 0)}
             </button>
           )}
           

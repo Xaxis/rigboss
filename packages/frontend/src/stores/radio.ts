@@ -7,35 +7,48 @@ const apiCall = (endpoint: string, options?: RequestInit) => {
   const config = getConfig();
   return fetch(`${config.apiUrl}${endpoint}`, options);
 };
-import type { RadioState, RadioMode, VFO, RadioInfo } from '@/types';
+import type { RadioState, RadioMode, VFO, RadioInfo, RadioCapabilities } from '@/types';
 
 interface RadioStore extends RadioState {
+  // Capabilities
+  capabilities: RadioCapabilities | null;
+
   // Actions
   connect: () => Promise<void>;
   disconnect: () => void;
   setFrequency: (frequency: number) => void;
-  setMode: (mode: RadioMode) => void;
+  setMode: (mode: string, bandwidthHz?: number) => void;
   setPower: (power: number) => void;
-  setVFO: (vfo: VFO) => void;
+  setVFO: (vfo: string) => void;
   setSplit: (split: boolean) => void;
   setPTT: (ptt: boolean) => void;
   setTuning: (tuning: boolean) => void;
+  tune: (ms?: number) => void;
   fetchStatus: () => Promise<void>;
   updateFromBackend: (data: Partial<RadioState>) => void;
+  updateCapabilities: (capabilities: RadioCapabilities) => void;
 }
 
 const initialState: RadioState = {
   connected: false,
-  frequency: 0, // Will be updated from backend
+  // Core frequency/mode/power
+  frequencyHz: 14074000,
   mode: 'USB',
-  power: 0, // Will be updated from backend
-  vfo: 'A',
-  split: false,
+  bandwidthHz: 2400,
+  power: 50,
   ptt: false,
   tuning: false,
-  swr: 0, // Will be updated from backend
-  signalStrength: 0, // Will be updated from backend
-  model: 'Connecting...',
+
+  // VFO operations
+  vfo: 'VFOA',
+  split: false,
+
+  // Levels
+  swr: 1.0,
+  signalStrength: -120,
+
+  // Rig info
+  rigModel: 'Connecting...',
   serialNumber: '',
   firmwareVersion: '',
 };
@@ -43,6 +56,9 @@ const initialState: RadioState = {
 export const useRadioStore = create<RadioStore>()(
   subscribeWithSelector((set, get) => ({
     ...initialState,
+
+    // Capabilities
+    capabilities: null,
 
     connect: async () => {
       const { getWebSocketService } = await import('../services/websocket');
@@ -69,40 +85,41 @@ export const useRadioStore = create<RadioStore>()(
     },
 
     setFrequency: async (frequency: number) => {
-      const oldFrequency = get().frequency;
-      set({ frequency }); // Optimistic update
-      
+      const oldFrequency = get().frequencyHz;
+      set({ frequencyHz: frequency }); // Optimistic update
+
       try {
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
         try {
           await ws.emitWithAck('radio:setFrequency', { frequency });
         } catch (e) {
-          set({ frequency: oldFrequency });
+          set({ frequencyHz: oldFrequency });
           throw e;
         }
       } catch (error) {
         console.error('Set frequency error:', error);
-        set({ frequency: oldFrequency });
+        set({ frequencyHz: oldFrequency });
       }
     },
 
-    setMode: async (mode: RadioMode) => {
+    setMode: async (mode: string, bandwidthHz?: number) => {
       const oldMode = get().mode;
-      set({ mode }); // Optimistic update
-      
+      const oldBandwidth = get().bandwidthHz;
+      set({ mode, ...(bandwidthHz && { bandwidthHz }) }); // Optimistic update
+
       try {
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
         try {
-          await ws.emitWithAck('radio:setMode', { mode });
+          await ws.emitWithAck('radio:setMode', { mode, bandwidthHz });
         } catch (e) {
-          set({ mode: oldMode });
+          set({ mode: oldMode, bandwidthHz: oldBandwidth });
           throw e;
         }
       } catch (error) {
         console.error('Set mode error:', error);
-        set({ mode: oldMode });
+        set({ mode: oldMode, bandwidthHz: oldBandwidth });
       }
     },
 
@@ -125,10 +142,10 @@ export const useRadioStore = create<RadioStore>()(
       }
     },
 
-    setVFO: async (vfo: VFO) => {
+    setVFO: async (vfo: string) => {
       const oldVFO = get().vfo;
       set({ vfo }); // Optimistic update
-      
+
       try {
         const { getWebSocketService } = await import('../services/websocket');
         const ws = getWebSocketService();
@@ -197,14 +214,22 @@ export const useRadioStore = create<RadioStore>()(
       }
     },
 
+    tune: async (ms = 1200) => {
+      try {
+        const { getWebSocketService } = await import('../services/websocket');
+        const ws = getWebSocketService();
+        await ws.emitWithAck('radio:tune', { ms });
+      } catch (error) {
+        console.error('Tune error:', error);
+      }
+    },
+
     fetchStatus: async () => {
       try {
-        const response = await fetch('/api/radio/status');
+        const response = await fetch('/api/radio/state');
         if (response.ok) {
           const result = await response.json();
-          if (result.success && result.data) {
-            set(result.data);
-          }
+          set(result);
         }
       } catch (error) {
         console.error('Fetch status error:', error);
@@ -212,26 +237,19 @@ export const useRadioStore = create<RadioStore>()(
     },
 
     updateFromBackend: (data: Partial<RadioState>) => {
-      // Map backend fields to store
-      const mapped: Partial<RadioState> = {
-        connected: data.connected ?? get().connected,
-        frequency: (data as any).frequency ?? (data as any).frequencyHz ?? get().frequency,
-        mode: (data as any).mode ?? get().mode,
-        bandwidthHz: typeof (data as any).bandwidthHz === 'number' ? (data as any).bandwidthHz : get().bandwidthHz,
-        power: typeof (data as any).power === 'number' ? (data as any).power : get().power,
-        ptt: typeof (data as any).ptt === 'boolean' ? (data as any).ptt : get().ptt,
-        model: (data as any).rigModel ?? get().model,
-        swr: typeof (data as any).swr === 'number' ? (data as any).swr : get().swr,
-        signalStrength: typeof (data as any).signalStrength === 'number' ? (data as any).signalStrength : get().signalStrength,
-      };
-      set((state) => ({ ...state, ...mapped }));
+      // Direct update since backend state now matches frontend state structure
+      set((state) => ({ ...state, ...data }));
+    },
+
+    updateCapabilities: (capabilities: RadioCapabilities) => {
+      set({ capabilities });
     },
   }))
 );
 
 // Selectors for optimized subscriptions
 export const useRadioConnected = () => useRadioStore((state) => state.connected);
-export const useRadioFrequency = () => useRadioStore((state) => state.frequency);
+export const useRadioFrequency = () => useRadioStore((state) => state.frequencyHz);
 export const useRadioMode = () => useRadioStore((state) => state.mode);
 export const useRadioPower = () => useRadioStore((state) => state.power);
 export const useRadioVFO = () => useRadioStore((state) => state.vfo);
@@ -240,6 +258,6 @@ export const useRadioPTT = () => useRadioStore((state) => state.ptt);
 export const useRadioTuning = () => useRadioStore((state) => state.tuning);
 export const useRadioSWR = () => useRadioStore((state) => state.swr);
 export const useRadioSignalStrength = () => useRadioStore((state) => state.signalStrength);
-export const useRadioModel = () => useRadioStore((state) => state.model);
+export const useRadioModel = () => useRadioStore((state) => state.rigModel);
 export const useRadioSerialNumber = () => useRadioStore((state) => state.serialNumber);
 export const useRadioFirmwareVersion = () => useRadioStore((state) => state.firmwareVersion);

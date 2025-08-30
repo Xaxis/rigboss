@@ -93,11 +93,11 @@ export function RadioStatus() {
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium text-muted-foreground">SWR</div>
             <div className="text-right">
-              <div className={cn("font-mono font-bold", getSWRColor(swr))}>
-                {formatSWR(swr)}
+              <div className={cn("font-mono font-bold", getSWRColor(swr || 1.0))}>
+                {formatSWR(swr || 1.0)}
               </div>
               <div className="text-xs text-muted-foreground">
-                {getSWRStatus(swr)}
+                {getSWRStatus(swr || 1.0)}
               </div>
             </div>
           </div>
@@ -106,8 +106,8 @@ export function RadioStatus() {
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium text-muted-foreground">Signal</div>
             <div className="text-right">
-              <div className={cn("font-mono font-bold", getSignalColor(signalStrength))}>
-                {formatSignalStrength(signalStrength)}
+              <div className={cn("font-mono font-bold", getSignalColor(signalStrength || -120))}>
+                {formatSignalStrength(signalStrength || -120)}
               </div>
               <div className="flex gap-1 justify-end mt-1">
                 {Array.from({ length: 5 }, (_, i) => (
@@ -115,8 +115,8 @@ export function RadioStatus() {
                     key={i}
                     className={cn(
                       "w-2 h-3 rounded-sm",
-                      i < getSignalBars(signalStrength)
-                        ? getSignalColor(signalStrength).replace('text-', 'bg-')
+                      i < getSignalBars(signalStrength || -120)
+                        ? getSignalColor(signalStrength || -120).replace('text-', 'bg-')
                         : "bg-muted"
                     )}
                   />
@@ -143,7 +143,7 @@ export function RadioStatus() {
           </div>
         )}
 
-        {swr > 2.0 && (
+        {(swr || 1.0) > 2.0 && (
           <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-900 dark:border-yellow-800">
             <div className="text-xs text-yellow-800 dark:text-yellow-200 font-medium">
               ⚠️ HIGH SWR - Check antenna connection
@@ -161,13 +161,13 @@ export function RadioStatus() {
               </span>
             </div>
             <div>
-              Antenna: <span className={cn("font-medium", getSWRColor(swr))}>
-                {getSWRStatus(swr)} ({formatSWR(swr)})
+              Antenna: <span className={cn("font-medium", getSWRColor(swr || 1.0))}>
+                {getSWRStatus(swr || 1.0)} ({formatSWR(swr || 1.0)})
               </span>
             </div>
             <div>
-              Signal: <span className={cn("font-medium", getSignalColor(signalStrength))}>
-                {getSignalBars(signalStrength)}/5 bars
+              Signal: <span className={cn("font-medium", getSignalColor(signalStrength || -120))}>
+                {getSignalBars(signalStrength || -120)}/5 bars
               </span>
             </div>
           </div>

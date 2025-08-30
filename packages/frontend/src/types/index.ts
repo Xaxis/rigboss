@@ -3,31 +3,143 @@ export type Panel = 'radio' | 'spectrum' | 'audio' | 'memory' | 'log' | 'setting
 
 export type Theme = 'light' | 'dark' | 'system';
 
-// Radio types
+// Radio types - matches backend comprehensive state
 export type RadioMode = 'LSB' | 'USB' | 'CW' | 'CWR' | 'AM' | 'FM' | 'WFM' | 'RTTY' | 'RTTYR' | 'PSK' | 'PSKR';
 
-export type VFO = 'A' | 'B';
+export type VFO = 'A' | 'B' | 'VFOA' | 'VFOB' | 'MEM';
 
 export interface RadioState {
   connected: boolean;
-  frequency: number;
-  mode: RadioMode;
-  power: number;
-  vfo: VFO;
-  split: boolean;
-  ptt: boolean;
-  tuning: boolean;
-  swr: number;
-  signalStrength: number;
-  model: string;
-  serialNumber: string;
-  firmwareVersion: string;
+
+  // Core frequency/mode/power
+  frequencyHz?: number;
+  mode?: string;
+  bandwidthHz?: number;
+  power?: number;
+  ptt?: boolean;
+  tuning?: boolean;
+
+  // VFO operations
+  vfo?: string;
+  split?: boolean;
+  splitFrequencyHz?: number;
+  splitMode?: string;
+  splitBandwidthHz?: number;
+
+  // RIT/XIT
+  rit?: number;
+  xit?: number;
+
+  // Antenna
+  antenna?: number;
+  antennaOption?: number;
+
+  // Repeater
+  repeaterShift?: string;
+  repeaterOffset?: number;
+
+  // CTCSS/DCS
+  ctcssTone?: number;
+  dcsCode?: string;
+  ctcssSQL?: number;
+  dcsSQL?: string;
+
+  // Tuning/Memory
+  tuningStep?: number;
+  memory?: number;
+
+  // Levels
+  swr?: number;
+  signalStrength?: number;
+  alc?: number;
+  afGain?: number;
+  rfGain?: number;
+  squelch?: number;
+  micGain?: number;
+  keySpeed?: number;
+  voxGain?: number;
+  antiVox?: number;
+  compLevel?: number;
+  agc?: string;
+  attenuator?: number;
+  preamp?: number;
+
+  // Functions status
+  noiseBlanker?: boolean;
+  noiseReduction?: boolean;
+  vox?: boolean;
+  compressor?: boolean;
+  monitor?: boolean;
+  breakIn?: boolean;
+
+  // Spectrum
+  spectrumMode?: string;
+  spectrumSpan?: number;
+  spectrumEdgeLow?: number;
+  spectrumEdgeHigh?: number;
+  spectrumSpeed?: number;
+  spectrumReference?: number;
+  spectrumAveraging?: number;
+
+  // Status
+  dcd?: boolean;
+  powerStatus?: number;
+  transceive?: string;
+
+  // Rig info
+  rigModel?: string;
+  serialNumber?: string;
+  firmwareVersion?: string;
+  rigInfo?: string;
 }
 
 export interface RadioInfo {
   model: string;
   serialNumber: string;
   firmwareVersion: string;
+}
+
+export interface RadioCapabilities {
+  levels: string[];
+  funcs: string[];
+  modes: string[];
+  vfos: string[];
+  supports: {
+    setFrequency: boolean;
+    setMode: boolean;
+    setPower: boolean;
+    setPTT: boolean;
+    setVFO: boolean;
+    setRIT: boolean;
+    setXIT: boolean;
+    setSplit: boolean;
+    setAntenna: boolean;
+    setCTCSS: boolean;
+    setDCS: boolean;
+    setTuningStep: boolean;
+    setRepeater: boolean;
+    setAGC: boolean;
+    setNoiseBlanker: boolean;
+    setNoiseReduction: boolean;
+    setAttenuator: boolean;
+    setPreamp: boolean;
+    setSquelch: boolean;
+    setRFGain: boolean;
+    setAFGain: boolean;
+    setMicGain: boolean;
+    setKeySpeed: boolean;
+    setVOX: boolean;
+    setCompressor: boolean;
+    setMonitor: boolean;
+    setBreakIn: boolean;
+    sendMorse: boolean;
+    tune: boolean;
+    scan: boolean;
+    memoryOps: boolean;
+    spectrum: boolean;
+  };
+  verifiedLevels?: Record<string, boolean>;
+  verifiedFuncs?: Record<string, boolean>;
 }
 
 // Spectrum types

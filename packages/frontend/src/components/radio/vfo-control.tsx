@@ -3,17 +3,15 @@ import { RotateCcw, ArrowLeftRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { useRadioVFO, useRadioSplit, useRadioConnected, useRadioStore } from '@/stores/radio';
+import { useRadioConnected, useRadioStore } from '@/stores/radio';
 import { cn } from '@/lib/utils';
 import type { VFO } from '@/types';
 
 export function VFOControl() {
-  const vfo = useRadioVFO();
-  const split = useRadioSplit();
+  const { vfo, split, setVFO, setSplit } = useRadioStore();
   const connected = useRadioConnected();
-  const { setVFO, setSplit } = useRadioStore();
 
-  const handleVFOChange = (newVFO: VFO) => {
+  const handleVFOChange = (newVFO: string) => {
     setVFO(newVFO);
   };
 
@@ -23,8 +21,8 @@ export function VFOControl() {
 
   const handleVFOSwap = () => {
     // This would swap VFO A and B frequencies
-    // For now, just toggle between A and B
-    setVFO(vfo === 'A' ? 'B' : 'A');
+    // For now, just toggle between VFOA and VFOB
+    setVFO(vfo === 'VFOA' ? 'VFOB' : 'VFOA');
   };
 
   return (
@@ -41,25 +39,25 @@ export function VFOControl() {
           <div className="text-sm font-medium text-muted-foreground">Active VFO</div>
           <div className="flex gap-2">
             <Button
-              variant={vfo === 'A' ? "default" : "outline"}
+              variant={vfo === 'VFOA' ? "default" : "outline"}
               size="lg"
-              onClick={() => handleVFOChange('A')}
+              onClick={() => handleVFOChange('VFOA')}
               disabled={!connected}
               className={cn(
                 "flex-1 text-lg font-bold",
-                vfo === 'A' && "bg-primary text-primary-foreground"
+                vfo === 'VFOA' && "bg-primary text-primary-foreground"
               )}
             >
               VFO A
             </Button>
             <Button
-              variant={vfo === 'B' ? "default" : "outline"}
+              variant={vfo === 'VFOB' ? "default" : "outline"}
               size="lg"
-              onClick={() => handleVFOChange('B')}
+              onClick={() => handleVFOChange('VFOB')}
               disabled={!connected}
               className={cn(
                 "flex-1 text-lg font-bold",
-                vfo === 'B' && "bg-primary text-primary-foreground"
+                vfo === 'VFOB' && "bg-primary text-primary-foreground"
               )}
             >
               VFO B

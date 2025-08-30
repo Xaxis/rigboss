@@ -2,13 +2,11 @@ import React from 'react';
 import { Info, Radio } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CollapsibleInfo, InfoItem } from '@/components/ui/collapsible-info';
-import { useRadioModel, useRadioSerialNumber, useRadioFirmwareVersion, useRadioConnected } from '@/stores/radio';
+import { useRadioConnected, useRadioStore } from '@/stores/radio';
 import { cn } from '@/lib/utils';
 
 export function RadioInfo() {
-  const model = useRadioModel();
-  const serialNumber = useRadioSerialNumber();
-  const firmwareVersion = useRadioFirmwareVersion();
+  const { rigModel, serialNumber, firmwareVersion, rigInfo } = useRadioStore();
   const connected = useRadioConnected();
 
   return (
@@ -26,7 +24,7 @@ export function RadioInfo() {
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium text-muted-foreground">Model</div>
               <div className="text-sm font-medium text-foreground">
-                {model || 'Unknown'}
+                {rigModel || 'Unknown'}
               </div>
             </div>
 
@@ -78,7 +76,7 @@ export function RadioInfo() {
         )}
 
         {/* Radio Capabilities (when connected) */}
-        {connected && model && (
+        {connected && rigModel && (
           <CollapsibleInfo title="Radio Capabilities" defaultOpen={false}>
             <div className="space-y-1">
               <div>• Frequency Control</div>
@@ -86,7 +84,7 @@ export function RadioInfo() {
               <div>• Power Control</div>
               <div>• VFO Operations</div>
               <div>• PTT Control</div>
-              {model.includes('7300') && (
+              {rigModel?.includes('7300') && (
                 <>
                   <div>• Spectrum Scope</div>
                   <div>• Waterfall Display</div>

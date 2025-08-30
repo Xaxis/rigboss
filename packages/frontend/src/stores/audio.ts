@@ -22,6 +22,7 @@ interface AudioStore extends AudioState {
   stopRecording: () => void;
   refreshDevices: () => Promise<void>;
   testAudio: () => Promise<void>;
+  updateLevels: (levels: { input: number; output: number }) => void;
   
   // Internal state
   audioContext: AudioContext | null;
@@ -236,6 +237,13 @@ export const useAudioStore = create<AudioStore>()(
         console.error('Failed to test audio:', error);
         throw error;
       }
+    },
+
+    updateLevels: (levels: { input: number; output: number }) => {
+      set({
+        inputLevel: levels.input,
+        outputLevel: levels.output,
+      });
     },
   }))
 );

@@ -2,7 +2,7 @@ import React from 'react';
 import { Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useRadioMode, useRadioConnected, useRadioStore } from '@/stores/radio';
+import { useRadioConnected, useRadioStore } from '@/stores/radio';
 import { cn } from '@/lib/utils';
 import type { RadioMode } from '@/types';
 
@@ -24,12 +24,11 @@ const commonModes: RadioMode[] = ['LSB', 'USB', 'CW', 'AM', 'FM'];
 const digitalModes: RadioMode[] = ['RTTY', 'RTTYR', 'PSK', 'PSKR'];
 
 export function ModeControl() {
-  const currentMode = useRadioMode();
+  const { mode: currentMode, setMode } = useRadioStore();
   const connected = useRadioConnected();
-  const { setMode } = useRadioStore();
   const [showAll, setShowAll] = React.useState(false);
 
-  const handleModeChange = (mode: RadioMode) => {
+  const handleModeChange = (mode: string) => {
     setMode(mode);
   };
 
@@ -37,7 +36,7 @@ export function ModeControl() {
     return modes.find(m => m.mode === mode);
   };
 
-  const currentModeInfo = getModeInfo(currentMode);
+  const currentModeInfo = getModeInfo((currentMode || 'USB') as any);
 
   return (
     <Card>
@@ -51,7 +50,7 @@ export function ModeControl() {
         {/* Current Mode Display */}
         <div className="text-center">
           <div className="text-2xl font-bold text-primary">
-            {currentModeInfo?.label || currentMode}
+            {currentModeInfo?.label || currentMode || 'USB'}
           </div>
           <div className="text-sm text-muted-foreground">
             {currentModeInfo?.description || 'Unknown mode'}
@@ -64,7 +63,7 @@ export function ModeControl() {
           <div className="grid grid-cols-5 gap-1">
             {commonModes.map((mode) => {
               const modeInfo = getModeInfo(mode);
-              const isActive = currentMode === mode;
+              const isActive = (currentMode || 'USB') === mode;
               
               return (
                 <Button

@@ -3,7 +3,7 @@ import type { Config } from '@/types';
 // Get configuration from environment variables and settings
 export function getConfig(): Config {
   // Environment variable ALWAYS wins if set
-  const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
+  const envBackendUrl = (import.meta as any).env?.VITE_BACKEND_URL;
   let backendUrl = 'http://localhost:3001';
 
   if (envBackendUrl) {
@@ -64,7 +64,7 @@ export function updateProxyConfig(newBackendUrl: string): void {
   }
   
   // For development, we need to reload the page to pick up the new proxy config
-  if (import.meta.env.DEV) {
+  if ((import.meta as any).env?.DEV) {
     console.log('Backend URL updated. Reloading page to apply new proxy configuration...');
     setTimeout(() => {
       window.location.reload();
