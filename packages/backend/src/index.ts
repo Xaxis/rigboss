@@ -43,7 +43,16 @@ async function main() {
     bufferSize: config.AUDIO_BUFFER_SIZE,
   });
 
-  const spectrumService = new SpectrumService({ sampleRate: config.AUDIO_SAMPLE_RATE, device: config.SPECTRUM_DEVICE });
+  // Connect spectrum service to radio service for frequency control
+  const spectrumService = new SpectrumService(
+    { sampleRate: config.AUDIO_SAMPLE_RATE, device: config.SPECTRUM_DEVICE },
+    (evt) => {
+      // When spectrum wants to tune radio
+      if (evt.state?.frequencyHz) {
+        radioService.setFrequency(evt.state.frequencyHz).catch(console.error);
+      }
+    }
+  );
 
   // Initialize Socket.IO
   const io = new SocketIOServer(fastify.server, {
