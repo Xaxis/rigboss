@@ -19,7 +19,7 @@ const EnvSchema = z.object({
   AUDIO_BUFFER_SIZE: z.coerce.number().int().positive().default(1024),
 
   // Spectrum/audio capture configuration
-  SPECTRUM_DEVICE: z.string().default('default'),
+  SPECTRUM_DEVICE: z.string().default('AUTO'),
 
   // Cross-network configuration
   CORS_ORIGIN: z.string().default('*'),

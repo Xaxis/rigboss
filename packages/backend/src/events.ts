@@ -6,15 +6,15 @@ export const EVENTS = {
   RADIO_DISCONNECTED: 'radio:disconnected',
   RADIO_CAPABILITIES: 'radio:capabilities',
   RADIO_ERROR: 'radio:error',
-  
+
   // Spectrum events
   SPECTRUM_FRAME: 'spectrum:frame',
   SPECTRUM_SETTINGS: 'spectrum:settings',
-  
+
   // Audio events
   AUDIO_LEVEL: 'audio:level',
   AUDIO_ERROR: 'audio:error',
-  
+
   // System events
   SYSTEM_STATUS: 'system:status',
 } as const;
@@ -43,6 +43,14 @@ export interface SpectrumFrameEvent {
   startHz: number;
   binSizeHz: number;
   bins: number[];
+}
+
+export interface SpectrumStatusEvent {
+  settings: any;
+  available?: boolean;
+  device?: string;
+  provider?: 'ffmpeg' | 'arecord';
+  fps?: number;
 }
 
 export interface AudioLevelEvent {

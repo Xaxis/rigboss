@@ -85,6 +85,10 @@ export class SpectrumService extends EventEmitter {
   private fft: any;
   private out: Float32Array;
   private imag: Float32Array;
+  private provider: 'ffmpeg' | 'arecord' | null = null;
+  private deviceSelected: string | null = null;
+  private framesCount = 0;
+  private lastFpsTick = Date.now();
   private lastBins: Float32Array | null = null;
 
   constructor(cfg: SpectrumConfig | undefined, onRadioState?: (evt: RadioStateEvent) => void) {
@@ -156,6 +160,7 @@ export class SpectrumService extends EventEmitter {
 
     console.log('[Spectrum] ffmpeg args:', args.join(' '));
     const proc = spawn(bin, args);
+    this.provider = 'ffmpeg';
 
     let gotData = false;
     await new Promise((r) => setTimeout(r, 200));
@@ -184,6 +189,8 @@ export class SpectrumService extends EventEmitter {
       return false;
     }
 
+    this.deviceSelected = device;
+
     // Success: adopt this process
     this.proc = proc as ChildProcessWithoutNullStreams;
     proc.stdout.off('data', onData);
@@ -205,6 +212,7 @@ export class SpectrumService extends EventEmitter {
   }
 
   private async tryStartWithArecord(device: string): Promise<boolean> {
+    this.provider = 'arecord';
     const args = ['-D', device, '-f', 'S16_LE', '-r', String(this.cfg.sampleRate), '-c', '1', '-q', '-t', 'raw', '-'];
     console.log('[Spectrum] arecord args:', args.join(' '));
     const proc = spawn('arecord', args);
@@ -375,6 +383,16 @@ export class SpectrumService extends EventEmitter {
     // Map to RF: bins array corresponds to spanHz across width
     const startHz = this.settings.centerHz - this.settings.spanHz / 2;
     const binSizeHz = this.settings.spanHz / dbBins.length;
+
+    // Emit periodic status with fps/device/provider
+    this.framesCount++;
+    const now = Date.now();
+    if (now - this.lastFpsTick >= 1000) {
+      const fps = this.framesCount;
+      this.framesCount = 0;
+      this.lastFpsTick = now;
+      this.emit(EVENTS.SPECTRUM_SETTINGS, { settings: this.getSettings(), available: true, device: this.deviceSelected ?? undefined, provider: this.provider ?? undefined, fps });
+    }
 
     const frame: SpectrumFrame = {
       timestamp: Date.now(),
