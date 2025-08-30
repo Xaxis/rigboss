@@ -180,10 +180,9 @@ class WebSocketService {
             fps: data.fps,
           };
 
-          // Only update backend-controlled settings, not user display settings
+          // NEVER override user display settings (centerHz, spanHz)
+          // Only update non-display backend settings
           const backendSettings: any = {};
-          if (data.settings.centerHz !== undefined) backendSettings.centerHz = data.settings.centerHz;
-          if (data.settings.spanHz !== undefined) backendSettings.spanHz = data.settings.spanHz;
           if (data.settings.fftSize !== undefined) backendSettings.fftSize = data.settings.fftSize;
           if (data.settings.averaging !== undefined) backendSettings.averaging = data.settings.averaging;
           if (data.settings.refLevel !== undefined) backendSettings.refLevel = data.settings.refLevel;

@@ -180,13 +180,10 @@ async function main() {
 
     // Spectrum settings via WS
     socket.on('spectrum:settings:set', (payload, callback) => {
-      console.log('🎛️ Backend received spectrum:settings:set:', payload);
       try {
         const applied = spectrumService.applySettings(payload || {});
-        console.log('🎛️ Backend applied settings successfully:', applied);
         callback?.(null, { success: true, settings: applied });
       } catch (e: any) {
-        console.log('🎛️ Backend error applying settings:', e);
         callback?.(e.message || 'Failed to apply spectrum settings', null);
       }
     });

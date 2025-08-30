@@ -180,12 +180,6 @@ export function SpectrumCanvas({
     const displayStartHz = settings.centerHz - settings.spanHz / 2;
     const displayEndHz = settings.centerHz + settings.spanHz / 2;
 
-    console.log('RENDER DEBUG:', {
-      dataRange: `${dataStartHz} - ${dataEndHz} (${dataSpanHz} Hz)`,
-      displayRange: `${displayStartHz} - ${displayEndHz} (${settings.spanHz} Hz)`,
-      center: settings.centerHz
-    });
-
     let hasStarted = false;
 
     // Draw only the portion of data that falls within display range

@@ -50,8 +50,6 @@ export const useSpectrumStore = create<SpectrumStore>()(
       const updatedSettings = { ...currentSettings, ...newSettings };
       set({ settings: updatedSettings });
 
-      console.log('🎛️ Frontend updating settings:', newSettings);
-
       // For proper spectrum analyzer behavior:
       // - Backend provides wide, fixed frequency range
       // - Frontend controls zoom/pan within that range
@@ -71,17 +69,12 @@ export const useSpectrumStore = create<SpectrumStore>()(
       }
 
       if (Object.keys(backendSettings).length > 0) {
-        console.log('🎛️ Sending to backend:', backendSettings);
         import('../services/websocket').then(({ getWebSocketService }) => {
           const ws = getWebSocketService();
           if (ws.isConnected()) {
             ws.emit('spectrum:settings:set', backendSettings);
-          } else {
-            console.log('🎛️ WebSocket not connected, cannot send settings');
           }
         });
-      } else {
-        console.log('🎛️ No backend settings to send (display-only change)');
       }
     },
 

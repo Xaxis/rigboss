@@ -262,12 +262,7 @@ export class SpectrumService extends EventEmitter {
 
   applySettings(patch: Partial<SpectrumSettings>): SpectrumSettings {
     const before = this.settings;
-    console.log('🎛️ Backend applying settings:', patch);
-    console.log('🎛️ Before:', { centerHz: before.centerHz, spanHz: before.spanHz });
-
     this.settings = { ...before, ...patch } as SpectrumSettings;
-
-    console.log('🎛️ After:', { centerHz: this.settings.centerHz, spanHz: this.settings.spanHz });
 
     // If frequency changed, tune the radio to new center frequency
     if (patch.centerHz && patch.centerHz !== before.centerHz) {
@@ -287,7 +282,6 @@ export class SpectrumService extends EventEmitter {
 
   private tuneRadioToCenter(centerHz: number): void {
     // Emit radio state event to tune radio to center frequency
-    console.log('🎛️ Tuning radio to center frequency:', centerHz);
     this.emit('couple-radio', {
       timestamp: Date.now(),
       state: { frequencyHz: centerHz }
@@ -492,15 +486,6 @@ export class SpectrumService extends EventEmitter {
     const wideSpanHz = 500000; // 500 kHz wide capture
     const startHz = this.settings.centerHz - wideSpanHz / 2;
     const binSizeHz = wideSpanHz / dbBins.length;
-
-    console.log('🎛️ Backend frame:', {
-      centerHz: this.settings.centerHz,
-      wideSpanHz,
-      startHz,
-      endHz: startHz + wideSpanHz,
-      binSizeHz,
-      numBins: dbBins.length
-    });
 
     // Emit periodic status with fps/device/provider
     this.framesCount++;
