@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { config as loadDotenv } from 'dotenv';
+
+// Load .env file
+loadDotenv();
 
 const EnvSchema = z.object({
   // Server configuration
