@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
+import fs from 'node:fs';
 import ffmpegPath from 'ffmpeg-static';
 import FFT from 'fft.js';
 import { EVENTS } from '../events.js';
@@ -25,9 +26,26 @@ export interface SpectrumFrame {
   bins: number[]; // dB values per bin
 }
 
+
 interface SpectrumConfig {
   sampleRate?: number; // Hz
   device?: string; // ALSA device, e.g., 'default' or 'hw:1,0'
+
+function listAlsaCards(): Array<{ index: number; name: string }> {
+  try {
+    const txt = fs.readFileSync('/proc/asound/cards', 'utf8');
+    const lines = txt.split('\n');
+    const out: Array<{ index: number; name: string }> = [];
+    for (const line of lines) {
+      const m = line.match(/^\s*(\d+)\s*\[([^\]]+)\]/);
+      if (m) out.push({ index: parseInt(m[1], 10), name: m[2].trim() });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 }
 
 // Simple Hann window
@@ -82,6 +100,91 @@ export class SpectrumService extends EventEmitter {
 
   getSettings(): SpectrumSettings {
     return { ...this.settings };
+
+  private buildDeviceCandidates(): string[] {
+    const candidates: string[] = [];
+    const configured = this.cfg.device;
+    if (configured && configured !== 'AUTO') candidates.push(configured);
+    if (process.platform === 'linux') {
+      const cards = listAlsaCards();
+      for (const c of cards) {
+        candidates.push(`hw:CARD=${c.name},DEV=0`);
+        candidates.push(`plughw:CARD=${c.name},DEV=0`);
+        candidates.push(`hw:${c.index},0`);
+        candidates.push(`hw:${c.index}`);
+        candidates.push(`plughw:${c.index},0`);
+        candidates.push(`plughw:${c.index}`);
+        candidates.push(`sysdefault:CARD=${c.name}`);
+      }
+      candidates.push('default');
+    } else if (process.platform === 'darwin') {
+      candidates.push(':0');
+    }
+    return Array.from(new Set(candidates));
+  }
+
+  private async tryStartForDevice(device: string): Promise<boolean> {
+    const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
+    const inputFmt = process.platform === 'linux' ? ['-f', 'alsa', '-i', device] : ['-f', 'avfoundation', '-i', ':0'];
+    const args = [
+      ...inputFmt,
+      '-ac', '1',
+      '-ar', String(this.cfg.sampleRate),
+      '-acodec', 'pcm_s16le',
+      '-f', 's16le',
+      'pipe:1',
+    ];
+
+    console.log('[Spectrum] ffmpeg args:', args.join(' '));
+    const proc = spawn(bin, args);
+
+    let gotData = false;
+    const onData = (chunk: Buffer) => {
+      gotData = true;
+      this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
+    };
+
+    proc.stdout.on('data', onData);
+
+    let stderrLines = 0;
+    proc.stderr.on('data', (buf: Buffer) => {
+      if (stderrLines < 5) {
+        console.log('[Spectrum][ffmpeg]', buf.toString().trim());
+        stderrLines++;
+      }
+    });
+
+    const success = await new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => resolve(gotData), 1200);
+      proc.once('close', () => resolve(false));
+      // If data arrives within 1.2s, we consider device opened
+    });
+
+    if (!success) {
+      try { proc.kill('SIGTERM'); } catch {}
+      return false;
+    }
+
+    // Success: adopt this process
+    this.proc = proc as ChildProcessWithoutNullStreams;
+    proc.stdout.off('data', onData);
+
+    this.proc.stdout.on('data', (chunk: Buffer) => {
+      this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
+    });
+
+    this.proc.on('error', (err) => {
+      this.emit(EVENTS.SPECTRUM_SETTINGS, { settings: this.getSettings(), available: false, error: String(err) });
+    });
+
+    this.proc.on('close', () => {
+      this.proc = null;
+      this.setUnavailable();
+    });
+
+    return true;
+  }
+
   }
 
   applySettings(patch: Partial<SpectrumSettings>): SpectrumSettings {
@@ -100,46 +203,25 @@ export class SpectrumService extends EventEmitter {
     return this.getSettings();
   }
 
-  start(): void {
+  async start(): Promise<void> {
     if (this.proc) return;
-    // For now we only implement PCM via ffmpeg; IF/IQ adapters can be added later
-    const inputFmt = process.platform === 'linux' ? ['-f', 'alsa', '-i', this.cfg.device] : ['-f', 'avfoundation', '-i', ':0'];
-    const args = [
-      ...inputFmt,
-      '-ac', '1',
-      '-ar', String(this.cfg.sampleRate),
-      '-acodec', 'pcm_s16le',
-      '-f', 's16le',
-      'pipe:1',
-    ];
 
-    const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
-    this.proc = spawn(bin, args);
-
-    this.proc.stdout.on('data', (chunk: Buffer) => {
-      this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);
-    });
-
-    // Log ffmpeg invocation once
-    console.log('[Spectrum] ffmpeg args:', args.join(' '));
-
-    this.proc.on('error', (err) => {
-      this.emit(EVENTS.SPECTRUM_SETTINGS, { settings: this.getSettings(), available: false, error: String(err) });
-    });
-
-    const proc = this.proc!;
-    let stderrLines = 0;
-    proc.stderr.on('data', (buf: Buffer) => {
-      if (stderrLines < 5) {
-        console.log('[Spectrum][ffmpeg]', buf.toString().trim());
-        stderrLines++;
+    const devices = this.buildDeviceCandidates();
+    let started = false;
+    for (const dev of devices) {
+      this.pcmBuffer = Buffer.alloc(0);
+      const ok = await this.tryStartForDevice(dev);
+      if (ok) {
+        console.log('[Spectrum] capture device selected:', dev);
+        started = true;
+        break;
       }
-    });
+    }
 
-    this.proc.on('close', () => {
-      this.proc = null;
+    if (!started) {
       this.setUnavailable();
-    });
+      return;
+    }
 
     // Frame loop
     const interval = Math.max(15, Math.min(60, this.settings.fps));
