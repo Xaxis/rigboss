@@ -143,57 +143,34 @@ export class AudioService extends EventEmitter {
   private async discoverAudioDevices(): Promise<void> {
     console.log('🔍 Discovering audio devices...');
 
-    // Common radio audio devices to look for
-    const radioDevices = [
-      { id: 'hw:CARD=CODEC,DEV=0', name: 'Icom IC-7300 Audio', type: 'both' },
-      { id: 'hw:CARD=USB,DEV=0', name: 'USB Radio Interface', type: 'both' },
-      { id: 'plughw:CARD=CODEC,DEV=0', name: 'Icom IC-7300 (ALSA)', type: 'both' },
-      { id: 'hw:1,0', name: 'USB Audio Device 1', type: 'both' },
-      { id: 'hw:2,0', name: 'USB Audio Device 2', type: 'both' },
+    // Use the same devices that work for spectrum
+    const workingDevices = [
+      { id: 'sysdefault:CARD=CODEC', name: 'Radio Audio (CODEC)', type: 'both' },
       { id: 'default', name: 'System Default', type: 'both' },
     ];
 
     this.availableDevices = [];
 
-    for (const device of radioDevices) {
-      // Test if device exists by trying to open it briefly
-      try {
-        const testArgs = ['-f', 'alsa', '-i', device.id, '-t', '0.1', '-f', 'null', '-'];
-        const testProc = spawn('ffmpeg', testArgs, { stdio: 'pipe' });
+    for (const device of workingDevices) {
+      // Add input device
+      this.availableDevices.push({
+        id: device.id,
+        name: `${device.name} (Input)`,
+        type: 'input',
+        channels: 1,
+        sampleRate: this.config.sampleRate,
+        isDefault: device.id === 'default',
+      });
 
-        const success = await new Promise<boolean>((resolve) => {
-          const timer = setTimeout(() => resolve(false), 2000);
-          testProc.once('close', (code) => {
-            clearTimeout(timer);
-            resolve(code === 0);
-          });
-        });
-
-        if (success || device.id === 'default') {
-          if (device.type === 'both' || device.type === 'input') {
-            this.availableDevices.push({
-              id: device.id,
-              name: `${device.name} (Input)`,
-              type: 'input',
-              channels: 1,
-              sampleRate: this.config.sampleRate,
-              isDefault: device.id === 'default',
-            });
-          }
-          if (device.type === 'both' || device.type === 'output') {
-            this.availableDevices.push({
-              id: device.id,
-              name: `${device.name} (Output)`,
-              type: 'output',
-              channels: 2,
-              sampleRate: this.config.sampleRate,
-              isDefault: device.id === 'default',
-            });
-          }
-        }
-      } catch (error) {
-        // Device not available, skip
-      }
+      // Add output device
+      this.availableDevices.push({
+        id: device.id,
+        name: `${device.name} (Output)`,
+        type: 'output',
+        channels: 2,
+        sampleRate: this.config.sampleRate,
+        isDefault: device.id === 'default',
+      });
     }
 
     // Set default devices
@@ -207,48 +184,10 @@ export class AudioService extends EventEmitter {
   }
 
   private async startRXAudio(): Promise<void> {
-    // For RX audio, we need to capture from radio audio OUTPUT (not computer speakers!)
-    // Try radio audio devices first, fallback to default input
-    const radioAudioDevices = [
-      'hw:CARD=CODEC,DEV=0',     // Icom IC-7300 audio output
-      'plughw:CARD=CODEC,DEV=0', // Icom with ALSA plugin
-      'hw:CARD=USB,DEV=0',       // Generic USB radio interface
-      'hw:1,0',                  // USB audio device
-      'default',                 // System default input
-    ];
+    // Use the SAME device that spectrum uses successfully!
+    const audioDevice = 'sysdefault:CARD=CODEC';
 
-    let audioDevice = null;
-
-    // Find working radio audio device
-    for (const device of radioAudioDevices) {
-      try {
-        console.log(`🔊 Testing RX audio device: ${device}`);
-        const testArgs = ['-f', 'alsa', '-i', device, '-t', '0.1', '-f', 'null', '-'];
-        const testProc = spawn('ffmpeg', testArgs, { stdio: 'pipe' });
-
-        const success = await new Promise<boolean>((resolve) => {
-          const timer = setTimeout(() => resolve(false), 2000);
-          testProc.once('close', (code) => {
-            clearTimeout(timer);
-            resolve(code === 0);
-          });
-        });
-
-        if (success) {
-          audioDevice = device;
-          break;
-        }
-      } catch (error) {
-        // Try next device
-      }
-    }
-
-    if (!audioDevice) {
-      console.log('🔊 No radio audio device found, skipping RX audio');
-      return;
-    }
-
-    console.log(`🔊 Starting RX audio from radio device: ${audioDevice}`);
+    console.log(`🔊 Starting RX audio from: ${audioDevice}`);
 
     try {
       const bin = (ffmpegPath as unknown as string) || 'ffmpeg';
@@ -262,23 +201,33 @@ export class AudioService extends EventEmitter {
         'pipe:1',
       ];
 
-      console.log('[Audio] RX capture args:', args.join(' '));
+      console.log('🔊 Audio capture args:', args.join(' '));
       this.rxAudioProc = spawn(bin, args);
 
       this.rxAudioProc.stdout.on('data', (chunk: Buffer) => {
+        console.log(`🔊 Audio data captured: ${chunk.length} bytes`);
         this.rxAudioBuffer = Buffer.concat([this.rxAudioBuffer, chunk]);
         // Emit RX audio data for streaming to frontend
         this.emit(EVENTS.AUDIO_RX_DATA, { data: chunk });
       });
 
+      this.rxAudioProc.stderr.on('data', (data) => {
+        console.log('🔊 Audio stderr:', data.toString());
+      });
+
       this.rxAudioProc.on('error', (err) => {
-        console.error('RX audio error:', err);
+        console.error('🔊 RX audio process error:', err);
         this.emit(EVENTS.AUDIO_ERROR, { error: 'RX audio failed' });
       });
 
-      console.log('🔊 RX audio started successfully');
+      this.rxAudioProc.on('close', (code) => {
+        console.log(`🔊 RX audio process closed with code: ${code}`);
+        this.rxAudioProc = null;
+      });
+
+      console.log('🔊 RX audio process started successfully');
     } catch (error) {
-      console.error('Failed to start RX audio:', error);
+      console.error('🔊 Failed to start RX audio:', error);
       throw error;
     }
   }
