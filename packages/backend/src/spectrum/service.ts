@@ -161,9 +161,9 @@ export class SpectrumService extends EventEmitter {
     });
 
     const success = await new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => resolve(gotData), 1200);
+      const timeout = setTimeout(() => resolve(gotData), 4000);
       proc.once('close', () => resolve(false));
-      // If data arrives within 1.2s, we consider device opened
+      // If data arrives within 4s, we consider device opened
     });
 
     if (!success) {
