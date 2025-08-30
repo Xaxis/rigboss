@@ -19,20 +19,14 @@ export function SpectrumAnalyzerPanel() {
   const [rightPanelOpen, setRightPanelOpen] = React.useState(true);
 
   useEffect(() => {
-    // Auto-detect best spectrum source on mount
+    // Initialize spectrum via WebSocket-only settings; backend selects best source
     if (!connected) {
-      autoDetectSource()
-        .then((source) => {
-          setConnected(true);
-          toast.success('Spectrum Connected', `Using ${source} data source`);
-        })
-        .catch((error) => {
-          console.error('Spectrum initialization failed:', error);
-          toast.warning('Spectrum Unavailable', 'Using fallback PCM audio source');
-          setConnected(true); // Still allow operation with fallback
-        });
+      import('@/services/websocket').then(({ getWebSocketService }) => {
+        const ws = getWebSocketService();
+        ws.emit('spectrum:settings:set', { source: 'AUTO' });
+      });
     }
-  }, [connected, autoDetectSource, setConnected]);
+  }, [connected]);
 
   if (fullscreen) {
     return (

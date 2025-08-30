@@ -68,6 +68,11 @@ async function main() {
     };
   });
 
+  // Temporary compatibility route to avoid 500s from older frontend code
+  fastify.get('/api/spectrum/detect-source', async () => {
+    return { success: true, data: { source: 'PCM' } };
+  });
+
   fastify.get('/api/radio/state', async () => {
     return radioService.getState();
   });

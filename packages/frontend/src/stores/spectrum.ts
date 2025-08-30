@@ -53,15 +53,10 @@ export const useSpectrumStore = create<SpectrumStore>()(
 
     setSource: (source: SpectrumSource) => {
       set({ source });
-      
-      // If not AUTO, send source preference to backend
-      if (source !== 'AUTO') {
-        fetch('/api/spectrum/source', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source }),
-        }).catch(console.error);
-      }
+      // Send via WebSocket as part of settings
+      import('../services/websocket').then(({ getWebSocketService }) => {
+        getWebSocketService().emit('spectrum:settings:set', { source });
+      });
     },
 
     setMode: (mode: SpectrumMode) => {
@@ -77,26 +72,13 @@ export const useSpectrumStore = create<SpectrumStore>()(
     },
 
     autoDetectSource: async (): Promise<SpectrumSource> => {
-      try {
-        const response = await fetch('/api/spectrum/detect-source');
-        const result = await response.json();
-        
-        if (result.success && result.data.source) {
-          const detectedSource = result.data.source as SpectrumSource;
-          set({ source: detectedSource });
-          return detectedSource;
-        }
-        
-        // Fallback order: IF -> IQ -> PCM
-        const fallbackSource: SpectrumSource = 'PCM';
-        set({ source: fallbackSource });
-        return fallbackSource;
-      } catch (error) {
-        console.error('Source detection failed:', error);
-        const fallbackSource: SpectrumSource = 'PCM';
-        set({ source: fallbackSource });
-        return fallbackSource;
-      }
+      // WebSocket-only: let backend choose source; assume PCM fallback
+      const fallbackSource: SpectrumSource = 'PCM';
+      set({ source: fallbackSource });
+      import('../services/websocket').then(({ getWebSocketService }) => {
+        getWebSocketService().emit('spectrum:settings:set', { source: 'AUTO' });
+      });
+      return fallbackSource;
     },
 
     reset: () => {

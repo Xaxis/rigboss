@@ -160,6 +160,7 @@ class WebSocketService {
     this.socket.on('spectrum:frame', (data: any) => {
       import('../stores/spectrum').then(({ useSpectrumStore }) => {
         useSpectrumStore.getState().updateFrame(data);
+        useSpectrumStore.setState({ connected: true });
       });
     });
 
