@@ -294,7 +294,7 @@ async function main() {
   // Connect audio service to spectrum service for shared audio stream
   spectrumService.on('pcm-data', (data: Buffer) => {
     // Forward spectrum PCM data to audio service for streaming
-    audioService.emit(EVENTS.AUDIO_RX_DATA, { data: Array.from(data) });
+    audioService.handleSharedAudioData(data);
   });
 
   // Start spectrum after radio connected so center coupling can work

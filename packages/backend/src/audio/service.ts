@@ -184,17 +184,16 @@ export class AudioService extends EventEmitter {
   }
 
   private async startRXAudio(): Promise<void> {
-    // DON'T start separate audio capture - spectrum service already captures the same audio!
-    // Instead, we'll get audio data from the spectrum service
-    console.log('🔊 Audio service will receive data from spectrum service (shared audio stream)');
-
-    // Set up listener for shared audio data from spectrum service
-    this.on(EVENTS.AUDIO_RX_DATA, (data) => {
-      console.log('🔊 Audio service received shared data:', data.data?.length || 0, 'bytes');
-      // This data will be automatically relayed to frontend via the main server event relay
-    });
-
+    // Audio service will receive shared data from spectrum service
+    // The main server will forward spectrum PCM data to this service
+    console.log('🔊 Audio service ready to stream shared audio data');
     return;
+  }
+
+  // Method to handle shared audio data from spectrum service
+  handleSharedAudioData(audioData: Buffer): void {
+    // Convert Buffer to Array for WebSocket transmission and emit
+    this.emit(EVENTS.AUDIO_RX_DATA, { data: Array.from(audioData) });
   }
 
   private stopRXAudio(): void {
