@@ -7,13 +7,13 @@ import { Switch } from '@/components/ui/switch';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { AudioDeviceSelector } from '@/components/audio/audio-device-selector';
 import { AudioLevelMeter } from '@/components/audio/audio-level-meter';
-import { useAudioStore, useAudioConnected, useAudioOutputLevel, useAudioInputLevel, useAudioMuted } from '@/stores/audio';
+import { useAudioControlStore, useAudioConnected, useAudioOutputLevel, useAudioInputLevel, useAudioMuted } from '@/stores/audio-new';
 import { useRadioStore } from '@/stores/radio';
 import { toast } from '@/stores/ui';
 import { cn } from '@/lib/utils';
 
 export function AudioSystemPanel() {
-  const audioStore = useAudioStore();
+  const audioControlStore = useAudioControlStore();
   const connected = useAudioConnected();
   const outputLevel = useAudioOutputLevel();
   const inputLevel = useAudioInputLevel();
@@ -24,16 +24,16 @@ export function AudioSystemPanel() {
 
   useEffect(() => {
     // Refresh audio devices on mount
-    audioStore.refreshDevices().catch((error) => {
+    audioControlStore.refreshDevices().catch((error) => {
       console.error('Failed to refresh audio devices:', error);
       toast.error('Audio Error', 'Failed to access audio devices');
     });
-  }, [audioStore]);
+  }, [audioControlStore]);
 
   const handleStartAudio = async () => {
     setIsStarting(true);
     try {
-      await audioStore.startAudio();
+      await audioControlStore.startAudio();
       toast.success('Audio Active', 'Radio audio is now streaming');
     } catch (error) {
       toast.error('Audio Failed', error instanceof Error ? error.message : 'Failed to start audio');
@@ -44,7 +44,7 @@ export function AudioSystemPanel() {
 
   const handleStopAudio = async () => {
     try {
-      await audioStore.stopAudio();
+      audioControlStore.stopAudio();
       toast.info('Audio Stopped', 'Radio audio stopped');
     } catch (error) {
       toast.error('Stop Failed', 'Failed to stop audio');
@@ -144,7 +144,7 @@ export function AudioSystemPanel() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => audioStore.setMuted(!muted)}
+                      onClick={() => audioControlStore.setMuted(!muted)}
                       className="h-8 w-8 p-0"
                     >
                       {muted ? <MicOff className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -154,7 +154,7 @@ export function AudioSystemPanel() {
                 </div>
                 <Slider
                   value={[outputLevel]}
-                  onValueChange={([value]) => audioStore.setOutputLevel(value)}
+                  onValueChange={([value]) => audioControlStore.setOutputLevel(value)}
                   max={100}
                   step={1}
                   className="w-full"
@@ -201,7 +201,7 @@ export function AudioSystemPanel() {
                 </div>
                 <Slider
                   value={[inputLevel]}
-                  onValueChange={([value]) => audioStore.setInputLevel(value)}
+                  onValueChange={([value]) => audioControlStore.setInputLevel(value)}
                   max={100}
                   step={1}
                   className="w-full"

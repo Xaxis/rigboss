@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, Mic, MicOff } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { useAudioInputLevel, useAudioOutputLevel, useAudioMuted, useAudioStore } from '@/stores/audio';
+import { useAudioInputMeterLevel, useAudioOutputMeterLevel } from '@/stores/audio-new';
 import { cn } from '@/lib/utils';
 
 interface AudioLevelMeterProps {
@@ -10,34 +10,26 @@ interface AudioLevelMeterProps {
 }
 
 export function AudioLevelMeter({ type }: AudioLevelMeterProps) {
-  const inputLevel = useAudioInputLevel();
-  const outputLevel = useAudioOutputLevel();
-  const muted = useAudioMuted();
-  const { setInputLevel, setOutputLevel, setMuted } = useAudioStore();
-  
+  const inputMeterLevel = useAudioInputMeterLevel();
+  const outputMeterLevel = useAudioOutputMeterLevel();
+
   const [realTimeLevel, setRealTimeLevel] = useState(0);
   const [peakLevel, setPeakLevel] = useState(0);
-  const animationRef = useRef<number>();
 
-  const level = type === 'input' ? inputLevel : outputLevel;
-  const setLevel = type === 'input' ? setInputLevel : setOutputLevel;
+  // Get METER levels (not volume controls!)
+  const meterLevel = type === 'input' ? inputMeterLevel : outputMeterLevel;
 
-  // Real-time audio level monitoring from backend
+  // Real-time audio level monitoring from meter levels
   useEffect(() => {
-    // Use actual level from props (comes from backend audio data)
+    // Use METER level (signal measurement), NOT volume control
+    const level = Math.min(meterLevel || 0, 1); // Clamp to 0-1
     setRealTimeLevel(level);
 
     // Update peak hold
     setPeakLevel(prev => Math.max(prev * 0.95, level));
-  }, [level]);
+  }, [meterLevel]);
 
-  const handleLevelChange = (value: number[]) => {
-    setLevel(value[0]);
-  };
-
-  const handleMuteToggle = () => {
-    setMuted(!muted);
-  };
+  // Level meters are READ-ONLY displays, not controls!
 
   const getLevelColor = (level: number) => {
     if (level < 30) return 'bg-green-500';
@@ -51,9 +43,9 @@ export function AudioLevelMeter({ type }: AudioLevelMeterProps) {
 
   const getIcon = () => {
     if (type === 'input') {
-      return muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />;
+      return <Mic className="h-4 w-4" />;
     } else {
-      return muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />;
+      return <Volume2 className="h-4 w-4" />;
     }
   };
 
@@ -61,33 +53,17 @@ export function AudioLevelMeter({ type }: AudioLevelMeterProps) {
     <div className="space-y-3">
       {/* Level Control Slider */}
       <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={handleMuteToggle}
-          className={cn(
-            "flex-shrink-0",
-            muted && "bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900 dark:text-red-400"
-          )}
-        >
+        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
           {getIcon()}
-        </Button>
+        </div>
         
         <div className="flex-1">
-          <Slider
-            value={[level]}
-            onValueChange={handleLevelChange}
-            max={100}
-            min={0}
-            step={1}
-            disabled={muted}
-            className="w-full"
-          />
+          {/* Level meters are READ-only displays */}
+          <div className="text-sm text-muted-foreground">
+            Level meters show signal strength only
+          </div>
         </div>
-        
-        <div className="text-sm font-mono w-12 text-right">
-          {level}%
-        </div>
+
       </div>
 
       {/* Visual Level Meter */}
@@ -131,9 +107,9 @@ export function AudioLevelMeter({ type }: AudioLevelMeterProps) {
         </div>
         
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Set:</span>
+          <span className="text-muted-foreground">Signal:</span>
           <span className="font-mono font-medium text-foreground">
-            {level}%
+            {Math.round(realTimeLevel * 100)}%
           </span>
         </div>
       </div>
@@ -145,17 +121,13 @@ export function AudioLevelMeter({ type }: AudioLevelMeterProps) {
         </div>
       )}
       
-      {realTimeLevel < 10 && level > 0 && (
+      {realTimeLevel < 0.1 && realTimeLevel > 0 && (
         <div className="text-xs text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded">
           ⚠️ Level very low - check connections
         </div>
       )}
       
-      {muted && (
-        <div className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 p-2 rounded">
-          🔇 Audio muted
-        </div>
-      )}
+
     </div>
   );
 }

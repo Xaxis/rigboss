@@ -210,8 +210,10 @@ async function main() {
     socket.on('audio:get_devices', async (payload, callback) => {
       try {
         const devices = await audioService.getDevices();
+        console.log('🔊 Backend sending devices:', devices?.length || 0, 'devices');
         callback?.(null, { devices });
       } catch (e: any) {
+        console.error('🔊 Backend device error:', e);
         callback?.(e.message || 'Failed to get audio devices', null);
       }
     });

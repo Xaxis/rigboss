@@ -161,7 +161,7 @@ export const useAudioStore = create<AudioStore>()(
           set({ analyserNode: analyser });
 
           // Start microphone level monitoring
-          this.startMicrophoneMonitoring(analyser);
+          get().startMicrophoneMonitoring(analyser);
         } catch (micError) {
           console.warn('Microphone access failed, continuing without TX audio:', micError);
           // Continue without microphone - RX audio still works
@@ -282,30 +282,47 @@ export const useAudioStore = create<AudioStore>()(
 
     updateMeterLevels: (levels: { outputRMS?: number; outputPeak?: number; inputRMS?: number; inputPeak?: number }) => {
       // Update ONLY meter levels, never volume controls
-      set((state) => ({
-        ...state,
-        outputMeterLevel: levels.outputRMS || state.outputMeterLevel,
-        inputMeterLevel: levels.inputRMS || state.inputMeterLevel,
-      }));
+      const state = get();
+      const newOutputLevel = levels.outputRMS ?? state.outputMeterLevel;
+      const newInputLevel = levels.inputRMS ?? state.inputMeterLevel;
+
+      // Only update if values changed significantly (prevent excessive updates)
+      if (Math.abs(newOutputLevel - state.outputMeterLevel) > 0.05 ||
+          Math.abs(newInputLevel - state.inputMeterLevel) > 0.05) {
+        set({
+          outputMeterLevel: newOutputLevel,
+          inputMeterLevel: newInputLevel,
+        });
+      }
     },
 
     // Start microphone level monitoring
     startMicrophoneMonitoring: (analyser: AnalyserNode) => {
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let lastUpdateTime = 0;
 
-      const updateLevel = () => {
-        analyser.getByteFrequencyData(dataArray);
-
-        // Calculate RMS level
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i] * dataArray[i];
+      const updateLevel = (timestamp: number) => {
+        // Throttle updates to 30fps to prevent excessive re-renders
+        if (timestamp - lastUpdateTime < 33) {
+          if (useAudioStore.getState().connected) {
+            requestAnimationFrame(updateLevel);
+          }
+          return;
         }
-        const rms = Math.sqrt(sum / dataArray.length);
-        const level = rms / 255; // Normalize to 0-1
+        lastUpdateTime = timestamp;
 
-        // Update input meter level (NOT volume control)
-        useAudioStore.getState().updateMeterLevels({ inputRMS: level });
+        analyser.getByteTimeDomainData(dataArray);
+
+        // Calculate RMS level from time domain data (better for voice detection)
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const sample = (dataArray[i] - 128) / 128; // Convert to -1 to 1
+          sumSquares += sample * sample;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+
+        // Update input meter level with boosted sensitivity for voice
+        useAudioStore.getState().updateMeterLevels({ inputRMS: rms * 5 });
 
         // Continue monitoring
         if (useAudioStore.getState().connected) {
@@ -313,7 +330,7 @@ export const useAudioStore = create<AudioStore>()(
         }
       };
 
-      updateLevel();
+      requestAnimationFrame(updateLevel);
     },
   }))
 );
@@ -325,6 +342,8 @@ export const useAudioSelectedInputDevice = () => useAudioStore((state) => state.
 export const useAudioSelectedOutputDevice = () => useAudioStore((state) => state.selectedOutputDevice);
 export const useAudioInputLevel = () => useAudioStore((state) => state.inputLevel);
 export const useAudioOutputLevel = () => useAudioStore((state) => state.outputLevel);
+export const useAudioInputMeterLevel = () => useAudioStore((state) => state.inputMeterLevel);
+export const useAudioOutputMeterLevel = () => useAudioStore((state) => state.outputMeterLevel);
 export const useAudioMuted = () => useAudioStore((state) => state.muted);
 export const useAudioRecording = () => useAudioStore((state) => state.recording);
 export const useAudioPlaying = () => useAudioStore((state) => state.playing);
